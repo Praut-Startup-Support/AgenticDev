@@ -780,18 +780,33 @@
     }, 2200);
   }
 
-  /* ── bodová mřížka na pozadí ── */
+  /* ── organismy na pozadí: particle life + jednoduchá buněčná evoluce ──
+     Dva druhy částic žijí pod stejnou fyzikou přitažlivosti/odpuzování
+     (à la Particle Life). Původní (zelený) druh se sám shlukuje a před
+     hráčovým prchá. Hráčův (žlutý) druh původní aktivně vyhledává a při
+     dotyku ho asimiluje — tažením/kliknutím uživatel přidává body svého
+     druhu, který se tak přirozeně rozrůstá a s původním soupeří. */
   (function(){
     const canvas = document.getElementById('dots');
     const ctx = canvas.getContext('2d');
-    const GAP = 30, BASE_R = 1.7, MAX_R = 4.4, BASE_A = 0.35, HOVER_R = 150,
-          SPEED = 560, WIDTH = 110, LIFE = 1700;
-    const FOS = [163,255,92], YEL = [240,214,74];
+
+    const R = 68, BETA = 0.3, FRICTION = 0.88, FORCE_SCALE = 900;
+    const CONVERT_R = 7, CONVERT_P = 0.05, BIRTH_P = 0.003, CAP = 420;
+    const NATIVE = 0, PLAYER = 1;
+    const COLOR = [[163,255,92], [240,214,74]];
+    // A[i][j] = síla, kterou druh i cítí od druhu j (+ přitažlivost, − odpuzování).
+    const A = [
+      [0.55, -0.35],   // původní: shlukuje se, před hráčem prchá
+      [0.55,  0.75],   // hráč: shlukuje se silněji a původní aktivně vyhledává
+    ];
+
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    let w = 0, h = 0, cols = 0, rows = 0, ox = 0, oy = 0;
-    const mouse = { x:-9999, y:-9999 };
-    const ripples = [];
-    let raf = 0;
+    let w = 0, h = 0;
+    let particles = [];
+    let grid = new Map();
+    const CELL = R;
+    const mouse = { x:-9999, y:-9999, down:false };
+    let raf = 0, last = 0;
 
     function resize(){
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -799,50 +814,117 @@
       canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr);
       canvas.style.width = w+'px'; canvas.style.height = h+'px';
       ctx.setTransform(dpr,0,0,dpr,0,0);
-      cols = Math.ceil(w/GAP)+1; rows = Math.ceil(h/GAP)+1;
-      ox = (w-(cols-1)*GAP)/2; oy = (h-(rows-1)*GAP)/2;
     }
-    function draw(now){
-      ctx.clearRect(0,0,w,h);
-      for (let i=ripples.length-1;i>=0;i--) if (now-ripples[i].start > LIFE) ripples.splice(i,1);
-      for (let gx=0; gx<cols; gx++){
-        for (let gy=0; gy<rows; gy++){
-          const x = ox+gx*GAP, y = oy+gy*GAP;
-          let a = BASE_A, r = BASE_R, mix = 0;
-          const md = Math.hypot(x-mouse.x, y-mouse.y);
-          if (md < HOVER_R){ const t = 1-md/HOVER_R; a = Math.max(a, BASE_A+t*0.5); r = BASE_R+t*1.3; }
-          for (const rp of ripples){
-            const age = now-rp.start, front = (age/1000)*SPEED;
-            const dist = Math.hypot(x-rp.x, y-rp.y), delta = Math.abs(dist-front);
-            if (delta < WIDTH){
-              const band = 1-delta/WIDTH, fade = 1-age/LIFE, power = band*fade;
-              a = Math.max(a, BASE_A+power*(1-BASE_A));
-              r = Math.max(r, BASE_R+power*(MAX_R-BASE_R));
-              mix = Math.max(mix, power);
-            }
-          }
-          const rr = Math.round(FOS[0]+(YEL[0]-FOS[0])*mix);
-          const gg = Math.round(FOS[1]+(YEL[1]-FOS[1])*mix);
-          const bb = Math.round(FOS[2]+(YEL[2]-FOS[2])*mix);
-          ctx.beginPath();
-          ctx.arc(x,y,r,0,Math.PI*2);
-          ctx.fillStyle = `rgba(${rr},${gg},${bb},${a})`;
-          if (a > 0.5){ ctx.shadowBlur = 8; ctx.shadowColor = ctx.fillStyle; } else ctx.shadowBlur = 0;
-          ctx.fill();
-        }
+
+    function spawn(species, x, y, n){
+      for (let k=0; k<n && particles.length < CAP; k++){
+        particles.push({
+          x: x + (Math.random()-.5)*14, y: y + (Math.random()-.5)*14,
+          vx: (Math.random()-.5)*20, vy: (Math.random()-.5)*20, s: species,
+        });
       }
-      ctx.shadowBlur = 0;
-      raf = requestAnimationFrame(draw);
     }
-    window.addEventListener('resize', resize);
+    function seed(){
+      particles = [];
+      const n = Math.min(150, Math.floor((w*h)/9000));
+      for (let i=0; i<n; i++) spawn(NATIVE, Math.random()*w, Math.random()*h, 1);
+    }
+
+    const key = (cx,cy) => cx+','+cy;
+    function buildGrid(){
+      grid = new Map();
+      for (const p of particles){
+        const k = key(Math.floor(p.x/CELL), Math.floor(p.y/CELL));
+        let arr = grid.get(k);
+        if (!arr) { arr = []; grid.set(k, arr); }
+        arr.push(p);
+      }
+    }
+    function neighborsOf(p){
+      const cx = Math.floor(p.x/CELL), cy = Math.floor(p.y/CELL), out = [];
+      for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++){
+        const arr = grid.get(key(cx+dx, cy+dy));
+        if (arr) for (const q of arr) if (q !== p) out.push(q);
+      }
+      return out;
+    }
+    // klasická "particle life" křivka: odpuzování do beta, trojúhelníková přitažlivost do 1×R
+    function force(r, coeff){
+      if (r < BETA) return r/BETA - 1;
+      if (r < 1) return coeff * (1 - Math.abs(2*r - 1 - BETA)/(1-BETA));
+      return 0;
+    }
+
+    function step(dt){
+      buildGrid();
+      const births = [];
+      for (const p of particles){
+        let fx = 0, fy = 0;
+        for (const q of neighborsOf(p)){
+          const dx = q.x-p.x, dy = q.y-p.y, d = Math.hypot(dx,dy);
+          if (d < 0.0001 || d > R) continue;
+          const f = force(d/R, A[p.s][q.s]);
+          fx += (dx/d)*f; fy += (dy/d)*f;
+          // asimilace: hráčův druh na dotyk "válcuje" původní
+          if (d < CONVERT_R && p.s === NATIVE && q.s === PLAYER && Math.random() < CONVERT_P) p.s = PLAYER;
+        }
+        p.vx = (p.vx + fx*FORCE_SCALE*dt) * FRICTION;
+        p.vy = (p.vy + fy*FORCE_SCALE*dt) * FRICTION;
+      }
+      for (const p of particles){
+        p.x = (p.x + p.vx*dt + w) % w;
+        p.y = (p.y + p.vy*dt + h) % h;
+      }
+      // růst: ve "zdravé" hustotě stejného druhu se občas zrodí nová částice
+      if (particles.length < CAP){
+        for (const p of particles){
+          if (Math.random() > BIRTH_P) continue;
+          const near = neighborsOf(p).filter(q => q.s === p.s && Math.hypot(q.x-p.x, q.y-p.y) < R*0.4);
+          if (near.length >= 2 && near.length <= 6) births.push({ s:p.s, x:p.x, y:p.y });
+        }
+        for (const b of births){ if (particles.length >= CAP) break; spawn(b.s, b.x, b.y, 1); }
+      }
+      if (mouse.down) spawn(PLAYER, mouse.x, mouse.y, 2);
+    }
+
+    function draw(){
+      ctx.clearRect(0, 0, w, h);
+      for (const p of particles){
+        const c = COLOR[p.s];
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},.12)`;
+        ctx.arc(p.x, p.y, 5.5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},.9)`;
+        ctx.arc(p.x, p.y, 1.8, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    function loop(now){
+      let dt = last ? (now-last)/1000 : 1/60;
+      dt = Math.min(dt, 1/20);
+      last = now;
+      step(dt);
+      draw();
+      raf = requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', () => { resize(); seed(); });
     window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
     window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
+    window.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
     window.addEventListener('pointerdown', e => {
-      ripples.push({ x:e.clientX, y:e.clientY, start:performance.now() });
-      if (ripples.length > 8) ripples.shift();
+      mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true;
+      spawn(PLAYER, e.clientX, e.clientY, 8);
+      if (!/^(a|button|input|label)$/i.test(e.target.tagName)) e.preventDefault();
     });
+    window.addEventListener('pointerup', () => { mouse.down = false; });
+
     resize();
-    if (reduced) draw(performance.now()); else raf = requestAnimationFrame(draw);
+    seed();
+    if (reduced) draw(); else raf = requestAnimationFrame(loop);
   })();
 </script>
 </body>
