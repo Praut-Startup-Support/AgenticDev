@@ -806,9 +806,9 @@
     const SIGHT = 130;           // dohled pro chování (kam se natočit), škáluje se vnímavostí
     const GROUP_R = 32;          // dosah pro velikost hejna — objektivní, genetikou se neškáluje
     const CONTACT = 6;           // dotyk — tady se řeší žrádlo
-    const FRICTION = 0.92;
-    const MAX_SPEED = 46;        // klidová rychlost je pomalá, únik krátce přesáhne
-    const WANDER = 6, FLOW = 15, SEEK = 15, FLEE = 46; // slabší šum a tažení = plyne, nelítá
+    const FRICTION = 0.9;
+    const MAX_SPEED = 78;        // klidová rychlost je plynulá, únik/vlna ji krátce přesáhne
+    const WANDER = 12, FLOW = 26, SEEK = 26, FLEE = 60; // plyne, ale ne pomalu
     const SATIETY_DECAY = 0.05, SATIETY_FLOOR = 0.08;
     const ENERGY_DRAIN = 0.02, ENERGY_REGEN = 0.015, ENERGY_EAT = 0.6;
     const FEAR_MAX = 3, FEAR_DECAY = 1, CONF_MAX = 2, CONF_DECAY = 1;
@@ -816,7 +816,7 @@
     const REPRO_MIN_AGE = 3;
     const MUTATION = 0.1;
     const TRAITS = ['courage', 'speed', 'sociability', 'perception', 'aggression'];
-    const RIPPLE_SPEED = 220, RIPPLE_WIDTH = 60, RIPPLE_LIFE = 1.4, RIPPLE_FORCE = 70; // RIPPLE_LIFE v sekundách
+    const RIPPLE_SPEED = 260, RIPPLE_WIDTH = 90, RIPPLE_LIFE = 1.4, RIPPLE_FORCE = 220; // RIPPLE_LIFE v sekundách
 
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
     function randTrait(){ return 0.65 + Math.random()*0.7; }
@@ -862,10 +862,18 @@
       for (const k of TRAITS) p[k] = parent ? clamp(parent[k] + (Math.random()-0.5)*MUTATION, 0.4, 1.6) : randTrait();
       particles.push(p);
     }
+    // Rozeseté jednotlivé body by čekaly minuty, než se náhodou potkají —
+    // proto se hned na startu naseje pár hejn na druh, ne prázdná plocha.
     function seed(){
       particles = [];
-      const n = Math.min(14, COLOR.length*4);
-      for (let i=0; i<n; i++) spawnOne(Math.floor(Math.random()*COLOR.length), Math.random()*w, Math.random()*h);
+      for (let s = 0; s < COLOR.length; s++){
+        const clusters = 3 + Math.floor(Math.random()*2);
+        for (let c = 0; c < clusters; c++){
+          const cx = Math.random()*w, cy = Math.random()*h;
+          const n = 4 + Math.floor(Math.random()*5);
+          for (let i = 0; i < n; i++) spawnOne(s, cx + (Math.random()-.5)*40, cy + (Math.random()-.5)*40);
+        }
+      }
     }
 
     const key = (cx,cy) => cx+','+cy;
@@ -1030,6 +1038,15 @@
 
     function draw(){
       ctx.clearRect(0, 0, w, h);
+      for (const r of ripples){
+        const age = time - r.start, radius = age*RIPPLE_SPEED, fade = Math.max(0, 1 - age/RIPPLE_LIFE);
+        if (fade <= 0) continue;
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(163,255,92,${fade*0.35})`;
+        ctx.lineWidth = 1.5;
+        ctx.arc(r.x, r.y, radius, 0, Math.PI*2);
+        ctx.stroke();
+      }
       for (const p of particles){
         const c = tint(p);
         const vitality = 0.5*p.satiety + 0.5*p.energy;
