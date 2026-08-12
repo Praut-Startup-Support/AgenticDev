@@ -38,7 +38,7 @@
     *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
   }
 
-  #rd, #dots{position:fixed; inset:0; z-index:0; pointer-events:none}
+  #rd, #dots{position:absolute; top:0; left:0; z-index:0; pointer-events:none}
   .site{position:relative; z-index:1}
 
   .wrap{max-width:var(--w); margin:0 auto; padding:0 24px}
@@ -854,7 +854,7 @@
         vec3 edge = vec3(0.42,1.0,0.36);
         float body = smoothstep(0.05,0.34,v);
         float rim = smoothstep(0.14,0.30,v) * (1.0-smoothstep(0.30,0.46,v));
-        outColor = vec4(mix(bg, mid, body*0.6) + edge*rim*0.4, 1.0);
+        outColor = vec4(mix(bg, mid, body*0.32) + edge*rim*0.2, 1.0);
       }`;
     const INJECT_VS = `#version 300 es
       in vec2 aPos;
@@ -929,7 +929,11 @@
     }
     function resize(w, h){
       canvas.width = w; canvas.height = h;
-      simH = 160; simW = Math.max(64, Math.round(simH * w / h));
+      // izotropní hustota mřížky — nezávisí na poměru stran, jinak by se na
+      // vysoké stránce (po zapnutí scrollování s obsahem) vzor roztáhl do pruhů
+      const TEXEL_PX = 10;
+      simW = Math.min(360, Math.max(64, Math.round(w / TEXEL_PX)));
+      simH = Math.min(900, Math.max(64, Math.round(h / TEXEL_PX)));
       texel = [1/simW, 1/simH];
       texA = makeTex(simW, simH); texB = makeTex(simW, simH);
       fboA = makeFbo(texA); fboB = makeFbo(texB);
@@ -992,14 +996,14 @@
 
     const COLOR = [[163,255,92], [240,214,74], [255,95,86]]; // druhy: zelená / žlutá / červená
     const DRIFT = [[210,255,110], [255,190,60], [255,120,80]]; // decentní barevný posun (lime / amber / red-orange)
-    const CAP = 260;
-    const POINT_R = 2.3;         // pevný poloměr bodu — nikdy neroste
+    const CAP = 780;             // 3× víc bodů
+    const POINT_R = 1.9;         // menší a tlumenější — víc bodů, ale decentnější
     const SIGHT = 130;           // dohled pro chování (kam se natočit), škáluje se vnímavostí
     const GROUP_R = 32;          // dosah pro velikost hejna — objektivní, genetikou se neškáluje
     const CONTACT = 6;           // dotyk — tady se řeší žrádlo
     const FRICTION = 0.9;
-    const MAX_SPEED = 78;        // klidová rychlost je plynulá, únik/vlna ji krátce přesáhne
-    const WANDER = 12, FLOW = 26, SEEK = 26, FLEE = 60; // plyne, ale ne pomalu
+    const MAX_SPEED = 100;       // klidová rychlost je plynulá, únik/vlna ji krátce přesáhne
+    const WANDER = 14, FLOW = 28, SEEK = 34, FLEE = 85; // silnější aktivita
     const SATIETY_DECAY = 0.05, SATIETY_FLOOR = 0.08;
     const ENERGY_DRAIN = 0.02, ENERGY_REGEN = 0.015, ENERGY_EAT = 0.6;
     const FEAR_MAX = 3, FEAR_DECAY = 1, CONF_MAX = 2, CONF_DECAY = 1;
@@ -1027,9 +1031,10 @@
     const mouse = { x:-9999, y:-9999, down:false };
     let raf = 0, last = 0, spawnTimer = 0.6;
 
+    function pageH(){ return Math.max(window.innerHeight, document.documentElement.scrollHeight); }
     function resize(){
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = window.innerWidth; h = window.innerHeight;
+      w = window.innerWidth; h = pageH(); // pozadí se táhne přes celou stránku, ne jen výřez — scrolluje s obsahem
       canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr);
       canvas.style.width = w+'px'; canvas.style.height = h+'px';
       ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -1059,7 +1064,7 @@
     function seed(){
       particles = [];
       for (let s = 0; s < COLOR.length; s++){
-        const clusters = 3 + Math.floor(Math.random()*2);
+        const clusters = 9 + Math.floor(Math.random()*4); // 3× víc hejn než dřív
         for (let c = 0; c < clusters; c++){
           const cx = Math.random()*w, cy = Math.random()*h;
           const n = 4 + Math.floor(Math.random()*5);
@@ -1185,11 +1190,13 @@
             const ex = loser.x-winner.x, ey = loser.y-winner.y, ed = Math.hypot(ex,ey) || 1;
             loser.vx += (ex/ed) * 90; loser.vy += (ey/ed) * 90;
             loser.fear = FEAR_MAX;
+            spawnRipple(winner.x, winner.y); // setkání — i nezdařené — udělá vlnu
             continue;
           }
           winner.satiety = 1; winner.energy = Math.min(1, winner.energy + ENERGY_EAT);
           winner.confidence = CONF_MAX; // úspěšný lov krátce zvýší sebevědomí
           for (const r of neighborsOf(loser)) if (r.species === loser.species) r.fear = FEAR_MAX; // "tady se stalo něco zlého"
+          spawnRipple(winner.x, winner.y);
           dead.add(loser);
           if (loser === p) break;
         }
@@ -1234,7 +1241,7 @@
         const age = time - r.start, radius = age*RIPPLE_SPEED, fade = Math.max(0, 1 - age/RIPPLE_LIFE);
         if (fade <= 0) continue;
         ctx.beginPath();
-        ctx.strokeStyle = `rgba(163,255,92,${fade*0.35})`;
+        ctx.strokeStyle = `rgba(163,255,92,${fade*0.18})`;
         ctx.lineWidth = 1.5;
         ctx.arc(r.x, r.y, radius, 0, Math.PI*2);
         ctx.stroke();
@@ -1245,7 +1252,7 @@
         const breathe = 0.85 + 0.15*Math.sin(time*0.4 + p.breathPhase);
         const tierMul = [0.55, 0.75, 1, 1.25][p.tier];
         const active = Math.max(p.fear/FEAR_MAX, p.confidence/CONF_MAX); // glow hlavně při aktivitě, ne pořád
-        const glow = p.tier >= 2 ? 0.35 : active > 0.4 ? active*0.25 : 0;
+        const glow = p.tier >= 2 ? 0.2 : active > 0.4 ? active*0.16 : 0;
         if (glow > 0.02){
           ctx.beginPath();
           ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${glow*breathe})`;
@@ -1253,7 +1260,7 @@
           ctx.fill();
         }
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.4+0.35*vitality)*breathe})`;
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.3+0.25*vitality)*breathe})`;
         ctx.arc(p.x, p.y, POINT_R*tierMul*breathe, 0, Math.PI*2);
         ctx.fill();
       }
@@ -1273,28 +1280,31 @@
       raf = requestAnimationFrame(loop);
     }
 
-    function pushRipple(x, y){
-      if (time - lastRipple < 0.12) return; // ať tažení nezaplaví simulaci desítkami vln za sekundu
-      lastRipple = time;
+    function spawnRipple(x, y){ // ze setkání v simulaci — bez čekání na kurzor
       ripples.push({ x, y, start: time });
-      if (ripples.length > 6) ripples.shift();
+      if (ripples.length > 10) ripples.shift();
+    }
+    function pushRipple(x, y){ // z pohybu kurzoru — jemně přiškrcené, ať to nezaplaví
+      if (time - lastRipple < 0.15) return;
+      lastRipple = time;
+      spawnRipple(x, y);
     }
     window.addEventListener('resize', () => { resize(); seed(); });
-    window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+    window.addEventListener('mousemove', e => { mouse.x = e.pageX; mouse.y = e.pageY; });
     window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
     window.addEventListener('pointermove', e => {
-      mouse.x = e.clientX; mouse.y = e.clientY;
-      if (mouse.down) pushRipple(e.clientX, e.clientY);
+      mouse.x = e.pageX; mouse.y = e.pageY;
+      pushRipple(e.pageX, e.pageY); // vlna jde automaticky ze samotného pohybu, ne z tažení
     });
     window.addEventListener('pointerdown', e => {
-      mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true;
-      pushRipple(e.clientX, e.clientY);
+      mouse.x = e.pageX; mouse.y = e.pageY;
+      for (let i = 0; i < 3; i++) spawnOne(Math.floor(Math.random()*COLOR.length), e.pageX, e.pageY); // klik = nový bod
       if (!/^(a|button|input|label)$/i.test(e.target.tagName)) e.preventDefault();
     });
-    window.addEventListener('pointerup', () => { mouse.down = false; });
 
     resize();
     seed();
+    setInterval(() => { if (Math.abs(pageH() - h) > 30) resize(); }, 900); // stránka může výšku měnit (jazyk, obsah)
     if (reduced) { draw(); if (rd) rd.render(); } else raf = requestAnimationFrame(loop);
   })();
 </script>
