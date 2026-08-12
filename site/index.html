@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AgenticDev — agenti pod kontrolou serveru</title>
 <meta name="description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server — ne notebook. Zdarma pro firmy do 1 M € obratu.">
-<meta name="theme-color" content="#0a0f0a">
+<meta name="theme-color" content="#050604">
 <link rel="icon" href="agenticdev.ico">
 <meta property="og:title" content="AgenticDev">
 <meta property="og:description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server — ne notebook.">
@@ -13,7 +13,7 @@
 <meta property="og:type" content="website">
 <style>
   :root{
-    --bg:#0a0f0a; --card:#121a12; --card2:#1a231a;
+    --bg:#050604; --card:#0e130e; --card2:#161d16;
     --line:rgba(226,240,226,.12); --line2:rgba(226,240,226,.18);
     --ink:#edf3ec; --dim:#93a596; --dim2:#5e6d60;
     --fosfor:#a3ff5c; --fosfor-dim:#7fd143; --yellow:#f0d64a; --deny:#ff5f56;
@@ -45,11 +45,11 @@
   .mono{font-family:var(--mono)}
   .kicker{
     font:600 12px/1 var(--mono); letter-spacing:.22em; text-transform:uppercase;
-    color:var(--fosfor); margin:0 0 12px;
+    color:#c7d4c3; margin:0 0 12px;
   }
-  .glow{color:var(--fosfor); text-shadow:0 0 18px rgba(163,255,92,.55), 0 0 4px rgba(163,255,92,.7)}
-  .glow-y{color:var(--yellow); text-shadow:0 0 18px rgba(240,214,74,.5)}
-  .box-glow{box-shadow:0 0 0 1px var(--fosfor), 0 0 24px -4px rgba(163,255,92,.5)}
+  .glow{color:var(--fosfor); text-shadow:0 0 13px rgba(163,255,92,.4), 0 0 3px rgba(163,255,92,.5)}
+  .glow-y{color:var(--yellow); text-shadow:0 0 13px rgba(240,214,74,.35)}
+  .box-glow{box-shadow:0 0 0 1px var(--fosfor), 0 0 18px -4px rgba(163,255,92,.35)}
 
   .grid-bg{
     background-image:linear-gradient(to right, var(--line) 1px, transparent 1px),
@@ -849,12 +849,12 @@
       uniform sampler2D uState;
       void main(){
         float v = texture(uState, vUv).g;
-        vec3 bg = vec3(0.039,0.059,0.039);
+        vec3 bg = vec3(0.02,0.024,0.016);
         vec3 mid = vec3(0.03,0.06,0.09);
         vec3 edge = vec3(0.42,1.0,0.36);
         float body = smoothstep(0.05,0.34,v);
         float rim = smoothstep(0.14,0.30,v) * (1.0-smoothstep(0.30,0.46,v));
-        outColor = vec4(mix(bg, mid, body*0.32) + edge*rim*0.2, 1.0);
+        outColor = vec4(mix(bg, mid, body*0.26) + edge*rim*0.16, 1.0);
       }`;
     const INJECT_VS = `#version 300 es
       in vec2 aPos;
@@ -1241,7 +1241,7 @@
         const age = time - r.start, radius = age*RIPPLE_SPEED, fade = Math.max(0, 1 - age/RIPPLE_LIFE);
         if (fade <= 0) continue;
         ctx.beginPath();
-        ctx.strokeStyle = `rgba(163,255,92,${fade*0.18})`;
+        ctx.strokeStyle = `rgba(163,255,92,${fade*0.14})`;
         ctx.lineWidth = 1.5;
         ctx.arc(r.x, r.y, radius, 0, Math.PI*2);
         ctx.stroke();
@@ -1252,7 +1252,7 @@
         const breathe = 0.85 + 0.15*Math.sin(time*0.4 + p.breathPhase);
         const tierMul = [0.55, 0.75, 1, 1.25][p.tier];
         const active = Math.max(p.fear/FEAR_MAX, p.confidence/CONF_MAX); // glow hlavně při aktivitě, ne pořád
-        const glow = p.tier >= 2 ? 0.2 : active > 0.4 ? active*0.16 : 0;
+        const glow = p.tier >= 2 ? 0.16 : active > 0.4 ? active*0.13 : 0;
         if (glow > 0.02){
           ctx.beginPath();
           ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${glow*breathe})`;
@@ -1260,7 +1260,7 @@
           ctx.fill();
         }
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.3+0.25*vitality)*breathe})`;
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.24+0.2*vitality)*breathe})`;
         ctx.arc(p.x, p.y, POINT_R*tierMul*breathe, 0, Math.PI*2);
         ctx.fill();
       }
