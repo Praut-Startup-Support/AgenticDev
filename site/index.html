@@ -781,30 +781,29 @@
   }
 
   /* ── organismy na pozadí: simulace přirozeného výběru ──
-     Málo bodů na začátku. Stejný druh se na dotyk spojí do jedné větší
-     skupiny a po chvíli se rozmnoží. Různé druhy na dotyk soupeří —
-     větší skupina tu menší sežere a naroste o její velikost. Po žrádle
-     je skupina "sytá": rozmnožuje se rychleji, ale je míň dravá; sytost
-     postupem času klesá zpět, dravost roste — hlad žene k dalšímu lovu.
-     Nové druhy se čas od času objeví samy, klik/tažení jich přidá další. */
+     Zůstává to soustava malých bodů — žádný bod nikdy nenaroste do
+     velkého kruhu, "velikost skupiny" je jen počet stejného druhu
+     nablízku. Málo bodů na začátku, stejný druh se k sobě táhne a
+     drží se v hejnu, po chvíli ve hejnu přibude nový bod (rozmnožení).
+     Když se potkají dva různé druhy, vyhraje ten, jehož hejno je na
+     místě setkání větší — bod menšího hejna zmizí (byl sežrán). Po
+     žrádle je vítězný bod "sytý": rozmnožuje se rychleji, míň loví;
+     sytost pak postupem času dohasíná a dravost zas roste. Nové druhy
+     se čas od času objeví samy, klik/tažení jich přidá další. */
   (function(){
     const canvas = document.getElementById('dots');
     const ctx = canvas.getContext('2d');
 
     const COLOR = [[163,255,92], [240,214,74], [255,95,86]]; // druhy: zelená / žlutá / červená
-    const CAP = 150;
-    const SIGHT = 220;          // dohled pro hledání partnera/kořisti/predátora
+    const CAP = 260;
+    const POINT_R = 2.3;         // pevný poloměr bodu — nikdy neroste
+    const SIGHT = 130;           // dohled pro chování (kam se natočit)
+    const GROUP_R = 32;          // dosah, ve kterém se počítá velikost hejna okolo bodu
+    const CONTACT = 6;           // dotyk — tady se řeší žrádlo
     const FRICTION = 0.9;
-    const WANDER = 26;          // síla náhodného bloudění
-    const SEEK = 34;            // přitažlivost ke stejnému druhu
-    const FLEE = 60;            // útěk před větším jiným druhem
-    const SATIETY_DECAY = 0.05; // /s — jak rychle sytost klesá zpět k hladu
-    const SATIETY_FLOOR = 0.08;
-    const REPRO_MIN_SIZE = 1.6;
-    const REPRO_BASE_P = 0.16;  // /s, škáluje se sytostí
-    const REPRO_COST = 0.22;
-
-    function sizeToRadius(s){ return Math.min(34, 3 + Math.sqrt(s)*3.2); }
+    const WANDER = 26, SEEK = 30, FLEE = 55;
+    const SATIETY_DECAY = 0.05, SATIETY_FLOOR = 0.08;
+    const REPRO_BASE_P = 0.12;   // /s, škáluje se sytostí, jen když je bod v hejnu
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let w = 0, h = 0;
@@ -826,7 +825,7 @@
       if (particles.length >= CAP) return;
       particles.push({
         x, y, vx:(Math.random()-.5)*16, vy:(Math.random()-.5)*16,
-        species, size:1, satiety: SATIETY_FLOOR + Math.random()*0.15,
+        species, satiety: SATIETY_FLOOR + Math.random()*0.15,
       });
     }
     function seed(){
@@ -853,15 +852,22 @@
       }
       return out;
     }
+    // "velikost hejna" kolem bodu — kolik stejného druhu je nablízku (+ ten bod sám)
+    function groupSize(p, nb){
+      let c = 1;
+      for (const q of nb) if (q.species === p.species && Math.hypot(q.x-p.x, q.y-p.y) < GROUP_R) c++;
+      return c;
+    }
 
     function step(dt){
       buildGrid();
 
-      // 1) chování: bloudění + tažení ke stejnému druhu + lov/útěk mezi druhy
+      // 1) chování: bloudění + tažení ke stejnému druhu + lov/útěk podle velikosti hejna
       for (const p of particles){
+        const nb = neighborsOf(p);
         let fx = (Math.random()-.5)*WANDER, fy = (Math.random()-.5)*WANDER;
         let nearestSame = null, dSame = Infinity, nearestOther = null, dOther = Infinity;
-        for (const q of neighborsOf(p)){
+        for (const q of nb){
           const dx = q.x-p.x, dy = q.y-p.y, d = Math.hypot(dx,dy);
           if (d > SIGHT || d < 0.0001) continue;
           if (q.species === p.species){ if (d < dSame){ dSame = d; nearestSame = q; } }
@@ -873,9 +879,10 @@
         }
         if (nearestOther){
           const dx = nearestOther.x-p.x, dy = nearestOther.y-p.y;
-          if (nearestOther.size > p.size){
-            // menší prchá před větším — o to silněji, čím je rozdíl výraznější
-            const ratio = nearestOther.size/p.size;
+          const myGroup = groupSize(p, nb), otherGroup = groupSize(nearestOther, neighborsOf(nearestOther));
+          if (otherGroup > myGroup){
+            // menší hejno prchá před větším — o to silněji, čím je rozdíl výraznější
+            const ratio = otherGroup/myGroup;
             fx -= dx/dOther * FLEE * ratio; fy -= dy/dOther * FLEE * ratio;
           } else {
             // dravost roste s hladem (nízká sytost)
@@ -891,42 +898,38 @@
         p.y = (p.y + p.vy*dt + h) % h;
       }
 
-      // 2) srážky: stejný druh se spojí, jiný druh — větší sežere menšího
+      // 2) dotyk: stejný druh se jen podrží v hejnu (nic nemizí), jiný druh —
+      //    bod menšího hejna na místě setkání je sežrán a mizí
+      buildGrid();
       const dead = new Set();
       for (const p of particles){
         if (dead.has(p)) continue;
-        for (const q of neighborsOf(p)){
-          if (q === p || dead.has(q) || dead.has(p)) continue;
-          const d = Math.hypot(q.x-p.x, q.y-p.y);
-          if (d > sizeToRadius(p.size) + sizeToRadius(q.size)) continue;
-          if (p.species === q.species){
-            const total = p.size + q.size;
-            p.x = (p.x*p.size + q.x*q.size)/total;
-            p.y = (p.y*p.size + q.y*q.size)/total;
-            p.satiety = (p.satiety*p.size + q.satiety*q.size)/total;
-            p.size = total;
-            dead.add(q);
-          } else {
-            const winner = p.size >= q.size ? p : q;
-            const loser = winner === p ? q : p;
-            winner.size += loser.size;
-            winner.satiety = 1; // po žrádle sytá — víc reprodukce, míň dravosti
-            dead.add(loser);
-            if (loser === p) break;
-          }
+        const nb = neighborsOf(p);
+        for (const q of nb){
+          if (q === p || dead.has(q) || dead.has(p) || q.species === p.species) continue;
+          if (Math.hypot(q.x-p.x, q.y-p.y) > CONTACT) continue;
+          const myGroup = groupSize(p, nb), otherGroup = groupSize(q, neighborsOf(q));
+          const winner = myGroup >= otherGroup ? p : q;
+          const loser = winner === p ? q : p;
+          winner.satiety = 1; // po žrádle sytý — víc reprodukce, míň dravosti
+          dead.add(loser);
+          if (loser === p) break;
         }
       }
       if (dead.size) particles = particles.filter(p => !dead.has(p));
 
-      // 3) sytost dohasíná zpět k hladu; sytější skupiny se rozmnožují snáz
+      // 3) sytost dohasíná zpět k hladu; body v hejnu se sytostí snáz rozmnoží
+      buildGrid();
       const births = [];
       for (const p of particles){
         p.satiety = Math.max(SATIETY_FLOOR, p.satiety - SATIETY_DECAY*dt);
-        if (p.size < REPRO_MIN_SIZE || particles.length + births.length >= CAP) continue;
+        if (particles.length + births.length >= CAP) continue;
+        const inGroup = groupSize(p, neighborsOf(p)) >= 2; // "dva stejného druhu se spojili"
+        if (!inGroup) continue;
         const pReproduce = REPRO_BASE_P * (0.3 + 0.9*p.satiety) * dt;
         if (Math.random() < pReproduce){
           births.push({ species:p.species, x:p.x, y:p.y });
-          p.size = Math.max(1, p.size - REPRO_COST);
+          p.satiety *= 0.7;
         }
       }
       for (const b of births) spawnOne(b.species, b.x + (Math.random()-.5)*10, b.y + (Math.random()-.5)*10);
@@ -943,14 +946,14 @@
     function draw(){
       ctx.clearRect(0, 0, w, h);
       for (const p of particles){
-        const c = COLOR[p.species], r = sizeToRadius(p.size);
+        const c = COLOR[p.species];
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.07+0.08*p.satiety})`;
-        ctx.arc(p.x, p.y, r*1.7, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.08+0.1*p.satiety})`;
+        ctx.arc(p.x, p.y, POINT_R*2.4, 0, Math.PI*2);
         ctx.fill();
         ctx.beginPath();
         ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.6+0.35*p.satiety})`;
-        ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+        ctx.arc(p.x, p.y, POINT_R, 0, Math.PI*2);
         ctx.fill();
       }
     }
