@@ -780,16 +780,20 @@
     }, 2200);
   }
 
-  /* ── organismy na pozadí: simulace přirozeného výběru ──
+  /* ── organismy na pozadí: simulace přirozeného výběru s genetikou ──
      Zůstává to soustava malých bodů — žádný bod nikdy nenaroste do
      velkého kruhu, "velikost skupiny" je jen počet stejného druhu
-     nablízku. Málo bodů na začátku, stejný druh se k sobě táhne a
-     drží se v hejnu, po chvíli ve hejnu přibude nový bod (rozmnožení).
-     Když se potkají dva různé druhy, vyhraje ten, jehož hejno je na
-     místě setkání větší — bod menšího hejna zmizí (byl sežrán). Po
-     žrádle je vítězný bod "sytý": rozmnožuje se rychleji, míň loví;
-     sytost pak postupem času dohasíná a dravost zas roste. Nové druhy
-     se čas od času objeví samy, klik/tažení jich přidá další. */
+     nablízku. Navíc má teď každý bod vlastní genetiku (odvaha,
+     rychlost, družnost, vnímavost, dravost) a dva krátké vnitřní
+     stavy: energii (dochází lovem/útěkem, doplní ji jídlo a klid) a
+     strach (naskočí po útoku nebo když nablízku někdo ze stejného
+     druhu zemře, chvíli přidává opatrnost). Vítěz střetu má krátce
+     navíc "sebevědomí" — je ochotnější zaútočit i na vyrovnanějšího
+     soupeře. Poražený má malou šanci na útěk, pokud je rychlejší než
+     vítěz. Při rozmnožení dítě dědí rodičovské vlastnosti s drobnou
+     mutací — populace se tak v čase sama posouvá přirozeným výběrem,
+     nikde to není napsané napevno. Nové druhy se čas od času objeví
+     samy, klik/tažení jich přidá další. */
   (function(){
     const canvas = document.getElementById('dots');
     const ctx = canvas.getContext('2d');
@@ -797,13 +801,21 @@
     const COLOR = [[163,255,92], [240,214,74], [255,95,86]]; // druhy: zelená / žlutá / červená
     const CAP = 260;
     const POINT_R = 2.3;         // pevný poloměr bodu — nikdy neroste
-    const SIGHT = 130;           // dohled pro chování (kam se natočit)
-    const GROUP_R = 32;          // dosah, ve kterém se počítá velikost hejna okolo bodu
+    const SIGHT = 130;           // dohled pro chování (kam se natočit), škáluje se vnímavostí
+    const GROUP_R = 32;          // dosah pro velikost hejna — objektivní, genetikou se neškáluje
     const CONTACT = 6;           // dotyk — tady se řeší žrádlo
     const FRICTION = 0.9;
     const WANDER = 26, SEEK = 30, FLEE = 55;
     const SATIETY_DECAY = 0.05, SATIETY_FLOOR = 0.08;
-    const REPRO_BASE_P = 0.12;   // /s, škáluje se sytostí, jen když je bod v hejnu
+    const ENERGY_DRAIN = 0.02, ENERGY_REGEN = 0.015, ENERGY_EAT = 0.6;
+    const FEAR_MAX = 3, FEAR_DECAY = 1, CONF_MAX = 2, CONF_DECAY = 1;
+    const REPRO_BASE_P = 0.12;   // /s, škáluje se sytostí a energií, jen když je bod v hejnu
+    const REPRO_MIN_AGE = 3;
+    const MUTATION = 0.1;
+    const TRAITS = ['courage', 'speed', 'sociability', 'perception', 'aggression'];
+
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+    function randTrait(){ return 0.65 + Math.random()*0.7; }
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let w = 0, h = 0;
@@ -821,12 +833,15 @@
       ctx.setTransform(dpr,0,0,dpr,0,0);
     }
 
-    function spawnOne(species, x, y){
+    function spawnOne(species, x, y, parent){
       if (particles.length >= CAP) return;
-      particles.push({
+      const p = {
         x, y, vx:(Math.random()-.5)*16, vy:(Math.random()-.5)*16,
         species, satiety: SATIETY_FLOOR + Math.random()*0.15,
-      });
+        energy: 0.8, age: 0, fear: 0, confidence: 0,
+      };
+      for (const k of TRAITS) p[k] = parent ? clamp(parent[k] + (Math.random()-0.5)*MUTATION, 0.4, 1.6) : randTrait();
+      particles.push(p);
     }
     function seed(){
       particles = [];
@@ -852,7 +867,8 @@
       }
       return out;
     }
-    // "velikost hejna" kolem bodu — kolik stejného druhu je nablízku (+ ten bod sám)
+    // "velikost hejna" kolem bodu — kolik stejného druhu je nablízku (+ ten bod sám).
+    // Objektivní číslo, stejné pro každého, kdo se dívá — genetika ho nezkresluje.
     function groupSize(p, nb){
       let c = 1;
       for (const q of nb) if (q.species === p.species && Math.hypot(q.x-p.x, q.y-p.y) < GROUP_R) c++;
@@ -862,36 +878,49 @@
     function step(dt){
       buildGrid();
 
-      // 1) chování: bloudění + tažení ke stejnému druhu + lov/útěk podle velikosti hejna
+      // 1) chování: bloudění + tažení ke stejnému druhu + lov/útěk podle velikosti
+      //    hejna, tlumené osobností (odvaha, dravost), strachem a únavou
       for (const p of particles){
+        p.age += dt;
         const nb = neighborsOf(p);
+        const sight = SIGHT * p.perception;
+        const stamina = 0.4 + 0.6*p.energy; // unavený reaguje slaběji na vše
         let fx = (Math.random()-.5)*WANDER, fy = (Math.random()-.5)*WANDER;
         let nearestSame = null, dSame = Infinity, nearestOther = null, dOther = Infinity;
         for (const q of nb){
           const dx = q.x-p.x, dy = q.y-p.y, d = Math.hypot(dx,dy);
-          if (d > SIGHT || d < 0.0001) continue;
+          if (d > sight || d < 0.0001) continue;
           if (q.species === p.species){ if (d < dSame){ dSame = d; nearestSame = q; } }
           else if (d < dOther){ dOther = d; nearestOther = q; }
         }
         if (nearestSame){
-          fx += (nearestSame.x-p.x)/dSame * SEEK;
-          fy += (nearestSame.y-p.y)/dSame * SEEK;
+          const seek = SEEK * p.sociability;
+          fx += (nearestSame.x-p.x)/dSame * seek;
+          fy += (nearestSame.y-p.y)/dSame * seek;
         }
         if (nearestOther){
           const dx = nearestOther.x-p.x, dy = nearestOther.y-p.y;
           const myGroup = groupSize(p, nb), otherGroup = groupSize(nearestOther, neighborsOf(nearestOther));
-          if (otherGroup > myGroup){
-            // menší hejno prchá před větším — o to silněji, čím je rozdíl výraznější
-            const ratio = otherGroup/myGroup;
-            fx -= dx/dOther * FLEE * ratio; fy -= dy/dOther * FLEE * ratio;
+          // strach snižuje odvahu, čerstvé sebevědomí z úlovku ji zvyšuje
+          const bravery = p.courage * (1 - 0.5*Math.min(1, p.fear/FEAR_MAX)) * (1 + 0.3*Math.min(1, p.confidence/CONF_MAX));
+          if (otherGroup > myGroup * (0.6 + 0.6*bravery)){
+            // menší/opatrnější hejno prchá před větším — silněji, čím horší přesila
+            const ratio = otherGroup/Math.max(1, myGroup);
+            fx -= dx/dOther * FLEE * ratio * p.speed; fy -= dy/dOther * FLEE * ratio * p.speed;
+            p.fear = Math.max(p.fear, 1.5); // krátká paměť na to, že prchal
           } else {
-            // dravost roste s hladem (nízká sytost)
-            const drav = (1 - p.satiety);
-            fx += dx/dOther * SEEK * drav; fy += dy/dOther * SEEK * drav;
+            // dravost roste s hladem (nízká sytost) i genetickou agresivitou
+            const drav = (1 - p.satiety) * p.aggression * bravery;
+            fx += dx/dOther * SEEK * drav * p.speed; fy += dy/dOther * SEEK * drav * p.speed;
           }
         }
-        p.vx = (p.vx + fx*dt) * FRICTION;
-        p.vy = (p.vy + fy*dt) * FRICTION;
+        p.vx = (p.vx + fx*dt*stamina) * FRICTION;
+        p.vy = (p.vy + fy*dt*stamina) * FRICTION;
+        p.fear = Math.max(0, p.fear - FEAR_DECAY*dt);
+        p.confidence = Math.max(0, p.confidence - CONF_DECAY*dt);
+        // sprint/útěk/lov stojí energii, klidný pohyb ji pomalu vrací
+        const speedMag = Math.hypot(p.vx, p.vy);
+        p.energy = clamp(p.energy - (0.006 + ENERGY_DRAIN*Math.min(1, speedMag/70))*dt + ENERGY_REGEN*dt*(speedMag<15?1:0), 0, 1);
       }
       for (const p of particles){
         p.x = (p.x + p.vx*dt + w) % w;
@@ -899,7 +928,8 @@
       }
 
       // 2) dotyk: stejný druh se jen podrží v hejnu (nic nemizí), jiný druh —
-      //    bod menšího hejna na místě setkání je sežrán a mizí
+      //    bod menšího hejna na místě setkání je sežrán (pokud neuteče) a mizí;
+      //    jeho blízcí příbuzní ze zabití zůstanou vystrašení
       buildGrid();
       const dead = new Set();
       for (const p of particles){
@@ -911,28 +941,40 @@
           const myGroup = groupSize(p, nb), otherGroup = groupSize(q, neighborsOf(q));
           const winner = myGroup >= otherGroup ? p : q;
           const loser = winner === p ? q : p;
-          winner.satiety = 1; // po žrádle sytý — víc reprodukce, míň dravosti
+          // rychlejší poražený má šanci vyklouznout
+          const escape = clamp(0.1 + 0.35*(loser.speed - winner.speed), 0, 0.6);
+          if (Math.random() < escape){
+            const ex = loser.x-winner.x, ey = loser.y-winner.y, ed = Math.hypot(ex,ey) || 1;
+            loser.vx += (ex/ed) * 90; loser.vy += (ey/ed) * 90;
+            loser.fear = FEAR_MAX;
+            continue;
+          }
+          winner.satiety = 1; winner.energy = Math.min(1, winner.energy + ENERGY_EAT);
+          winner.confidence = CONF_MAX; // úspěšný lov krátce zvýší sebevědomí
+          for (const r of neighborsOf(loser)) if (r.species === loser.species) r.fear = FEAR_MAX; // "tady se stalo něco zlého"
           dead.add(loser);
           if (loser === p) break;
         }
       }
       if (dead.size) particles = particles.filter(p => !dead.has(p));
 
-      // 3) sytost dohasíná zpět k hladu; body v hejnu se sytostí snáz rozmnoží
+      // 3) sytost dohasíná zpět k hladu; syté a odpočaté body v hejnu, které
+      //    už nejsou úplně mladé, se snáz rozmnoží
       buildGrid();
       const births = [];
       for (const p of particles){
         p.satiety = Math.max(SATIETY_FLOOR, p.satiety - SATIETY_DECAY*dt);
         if (particles.length + births.length >= CAP) continue;
+        if (p.age < REPRO_MIN_AGE || p.energy < 0.45) continue;
         const inGroup = groupSize(p, neighborsOf(p)) >= 2; // "dva stejného druhu se spojili"
         if (!inGroup) continue;
-        const pReproduce = REPRO_BASE_P * (0.3 + 0.9*p.satiety) * dt;
+        const pReproduce = REPRO_BASE_P * (0.3 + 0.9*p.satiety) * p.energy * dt;
         if (Math.random() < pReproduce){
-          births.push({ species:p.species, x:p.x, y:p.y });
-          p.satiety *= 0.7;
+          births.push({ species:p.species, x:p.x, y:p.y, parent:p });
+          p.satiety *= 0.7; p.energy = Math.max(0, p.energy - 0.2);
         }
       }
-      for (const b of births) spawnOne(b.species, b.x + (Math.random()-.5)*10, b.y + (Math.random()-.5)*10);
+      for (const b of births) spawnOne(b.species, b.x + (Math.random()-.5)*10, b.y + (Math.random()-.5)*10, b.parent);
 
       // 4) čas od času se samy od sebe objeví nové druhy
       spawnTimer -= dt;
@@ -947,12 +989,13 @@
       ctx.clearRect(0, 0, w, h);
       for (const p of particles){
         const c = COLOR[p.species];
+        const vitality = 0.5*p.satiety + 0.5*p.energy;
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.08+0.1*p.satiety})`;
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.08+0.1*vitality})`;
         ctx.arc(p.x, p.y, POINT_R*2.4, 0, Math.PI*2);
         ctx.fill();
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.6+0.35*p.satiety})`;
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.55+0.4*vitality})`;
         ctx.arc(p.x, p.y, POINT_R, 0, Math.PI*2);
         ctx.fill();
       }
