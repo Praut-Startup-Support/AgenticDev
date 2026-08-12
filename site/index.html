@@ -14,7 +14,7 @@
 <style>
   :root{
     --bg:#050604; --card:#0e130e; --card2:#161d16;
-    --line:rgba(226,240,226,.12); --line2:rgba(226,240,226,.18);
+    --line:rgba(226,240,226,.18); --line2:rgba(226,240,226,.26);
     --ink:#edf3ec; --dim:#93a596; --dim2:#5e6d60;
     --fosfor:#a3ff5c; --fosfor-dim:#7fd143; --yellow:#f0d64a; --deny:#ff5f56;
     --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
@@ -39,6 +39,7 @@
   }
 
   #rd, #dots{position:absolute; top:0; left:0; z-index:0; pointer-events:none}
+  #scrim{position:fixed; inset:0; z-index:0; pointer-events:none; background:rgba(3,4,3,.55)}
   .site{position:relative; z-index:1}
 
   .wrap{max-width:var(--w); margin:0 auto; padding:0 24px}
@@ -273,6 +274,7 @@
 
 <canvas id="rd" aria-hidden="true"></canvas>
 <canvas id="dots" aria-hidden="true"></canvas>
+<div id="scrim" aria-hidden="true"></div>
 
 <div class="site">
 
