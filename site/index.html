@@ -783,29 +783,32 @@
   /* ── organismy na pozadí: simulace přirozeného výběru s genetikou ──
      Zůstává to soustava malých bodů — žádný bod nikdy nenaroste do
      velkého kruhu, "velikost skupiny" je jen počet stejného druhu
-     nablízku. Navíc má teď každý bod vlastní genetiku (odvaha,
-     rychlost, družnost, vnímavost, dravost) a dva krátké vnitřní
-     stavy: energii (dochází lovem/útěkem, doplní ji jídlo a klid) a
-     strach (naskočí po útoku nebo když nablízku někdo ze stejného
-     druhu zemře, chvíli přidává opatrnost). Vítěz střetu má krátce
-     navíc "sebevědomí" — je ochotnější zaútočit i na vyrovnanějšího
-     soupeře. Poražený má malou šanci na útěk, pokud je rychlejší než
-     vítěz. Při rozmnožení dítě dědí rodičovské vlastnosti s drobnou
-     mutací — populace se tak v čase sama posouvá přirozeným výběrem,
-     nikde to není napsané napevno. Nové druhy se čas od času objeví
-     samy, klik/tažení jich přidá další. */
+     nablízku. Každý bod má vlastní genetiku (odvaha, rychlost,
+     družnost, vnímavost, dravost), energii a krátkou paměť (strach po
+     útoku/zabití nablízku, sebevědomí po úlovku). Poražený v souboji má
+     šanci utéct, pokud je rychlejší. Při rozmnožení dítě dědí
+     vlastnosti rodiče s drobnou mutací — přirozený výběr, nic napevno.
+     Pohyb navíc netvoří čistý náhodný šum, ale plyne podle pomalu se
+     měnícího "proudového pole" (levný šum místo Perlinu) — proto to
+     spíš teče jako mikroorganismy než létá jako částice. Hejna se
+     volně tvoří a zase rozpouštějí, celé pole nepatrně "dýchá" a
+     kurzor nic nespawnuje — jen jako dotyk vytvoří vlnu, která
+     organismy kolem sebe na chvíli zvíří a pak se to zas uklidní. Nové
+     druhy se čas od času objeví samy, na okraji populace. */
   (function(){
     const canvas = document.getElementById('dots');
     const ctx = canvas.getContext('2d');
 
     const COLOR = [[163,255,92], [240,214,74], [255,95,86]]; // druhy: zelená / žlutá / červená
+    const DRIFT = [[210,255,110], [255,190,60], [255,120,80]]; // decentní barevný posun (lime / amber / red-orange)
     const CAP = 260;
     const POINT_R = 2.3;         // pevný poloměr bodu — nikdy neroste
     const SIGHT = 130;           // dohled pro chování (kam se natočit), škáluje se vnímavostí
     const GROUP_R = 32;          // dosah pro velikost hejna — objektivní, genetikou se neškáluje
     const CONTACT = 6;           // dotyk — tady se řeší žrádlo
-    const FRICTION = 0.9;
-    const WANDER = 26, SEEK = 30, FLEE = 55;
+    const FRICTION = 0.92;
+    const MAX_SPEED = 46;        // klidová rychlost je pomalá, únik krátce přesáhne
+    const WANDER = 6, FLOW = 15, SEEK = 15, FLEE = 46; // slabší šum a tažení = plyne, nelítá
     const SATIETY_DECAY = 0.05, SATIETY_FLOOR = 0.08;
     const ENERGY_DRAIN = 0.02, ENERGY_REGEN = 0.015, ENERGY_EAT = 0.6;
     const FEAR_MAX = 3, FEAR_DECAY = 1, CONF_MAX = 2, CONF_DECAY = 1;
@@ -813,15 +816,23 @@
     const REPRO_MIN_AGE = 3;
     const MUTATION = 0.1;
     const TRAITS = ['courage', 'speed', 'sociability', 'perception', 'aggression'];
+    const RIPPLE_SPEED = 220, RIPPLE_WIDTH = 60, RIPPLE_LIFE = 1.4, RIPPLE_FORCE = 70; // RIPPLE_LIFE v sekundách
 
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
     function randTrait(){ return 0.65 + Math.random()*0.7; }
+    // levný náhrad Perlinu — hladké, plynule se měnící pole, žádná knihovna navíc
+    function flowAngle(x, y, t){
+      return (Math.sin(x*0.006 + t*0.16) + Math.cos(y*0.007 - t*0.12) +
+              Math.sin((x - y)*0.004 + t*0.08)) * Math.PI * 0.5;
+    }
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    let w = 0, h = 0;
+    let w = 0, h = 0, time = 0;
     let particles = [];
     let grid = new Map();
+    let ripples = [];
     const CELL = SIGHT;
+    let lastRipple = -999;
     const mouse = { x:-9999, y:-9999, down:false };
     let raf = 0, last = 0, spawnTimer = 0.6;
 
@@ -833,12 +844,20 @@
       ctx.setTransform(dpr,0,0,dpr,0,0);
     }
 
+    // vizuální hierarchie: většina bodů je malá a tlumená, jen hrstka výrazná/vzácná
+    function pickTier(){
+      const r = Math.random();
+      return r < 0.7 ? 0 : r < 0.9 ? 1 : r < 0.98 ? 2 : 3;
+    }
     function spawnOne(species, x, y, parent){
       if (particles.length >= CAP) return;
       const p = {
-        x, y, vx:(Math.random()-.5)*16, vy:(Math.random()-.5)*16,
+        x, y, vx:(Math.random()-.5)*6, vy:(Math.random()-.5)*6,
         species, satiety: SATIETY_FLOOR + Math.random()*0.15,
         energy: 0.8, age: 0, fear: 0, confidence: 0,
+        tier: parent ? parent.tier : pickTier(),
+        colorDrift: parent ? clamp(parent.colorDrift + (Math.random()-0.5)*0.1, 0, 1) : (Math.random() < 0.85 ? Math.random()*0.35 : 0.35+Math.random()*0.5),
+        breathPhase: Math.random()*Math.PI*2,
       };
       for (const k of TRAITS) p[k] = parent ? clamp(parent[k] + (Math.random()-0.5)*MUTATION, 0.4, 1.6) : randTrait();
       particles.push(p);
@@ -876,16 +895,32 @@
     }
 
     function step(dt){
+      time += dt;
       buildGrid();
 
-      // 1) chování: bloudění + tažení ke stejnému druhu + lov/útěk podle velikosti
-      //    hejna, tlumené osobností (odvaha, dravost), strachem a únavou
+      // 1) chování: proudové pole + slabý šum + tažení ke stejnému druhu +
+      //    lov/útěk podle velikosti hejna, tlumené osobností, strachem a únavou
       for (const p of particles){
         p.age += dt;
         const nb = neighborsOf(p);
         const sight = SIGHT * p.perception;
         const stamina = 0.4 + 0.6*p.energy; // unavený reaguje slaběji na vše
-        let fx = (Math.random()-.5)*WANDER, fy = (Math.random()-.5)*WANDER;
+        const angle = flowAngle(p.x, p.y, time);
+        let fx = Math.cos(angle)*FLOW + (Math.random()-.5)*WANDER;
+        let fy = Math.sin(angle)*FLOW + (Math.random()-.5)*WANDER;
+        // dotyk vytváří vlnu, ne magnet — kolem právě procházejícího čela se
+        // organismy krátce zvíří a pak se to samo uklidní
+        for (const r of ripples){
+          const age = time - r.start, front = age*RIPPLE_SPEED;
+          const dx = p.x-r.x, dy = p.y-r.y, dist = Math.hypot(dx,dy) || 0.0001;
+          const delta = Math.abs(dist-front);
+          if (delta < RIPPLE_WIDTH){
+            const power = (1 - delta/RIPPLE_WIDTH) * Math.max(0, 1 - age/RIPPLE_LIFE);
+            const nx = dx/dist, ny = dy/dist;
+            fx += (-ny*0.7 + nx*0.3) * power * RIPPLE_FORCE;
+            fy += (nx*0.7 + ny*0.3) * power * RIPPLE_FORCE;
+          }
+        }
         let nearestSame = null, dSame = Infinity, nearestOther = null, dOther = Infinity;
         for (const q of nb){
           const dx = q.x-p.x, dy = q.y-p.y, d = Math.hypot(dx,dy);
@@ -916,6 +951,8 @@
         }
         p.vx = (p.vx + fx*dt*stamina) * FRICTION;
         p.vy = (p.vy + fy*dt*stamina) * FRICTION;
+        const sp = Math.hypot(p.vx, p.vy);
+        if (sp > MAX_SPEED){ p.vx = p.vx/sp*MAX_SPEED; p.vy = p.vy/sp*MAX_SPEED; } // klid je pomalý, únik krátce přesáhne
         p.fear = Math.max(0, p.fear - FEAR_DECAY*dt);
         p.confidence = Math.max(0, p.confidence - CONF_DECAY*dt);
         // sprint/útěk/lov stojí energii, klidný pohyb ji pomalu vrací
@@ -926,6 +963,7 @@
         p.x = (p.x + p.vx*dt + w) % w;
         p.y = (p.y + p.vy*dt + h) % h;
       }
+      for (let i=ripples.length-1; i>=0; i--) if (time-ripples[i].start > RIPPLE_LIFE) ripples.splice(i,1);
 
       // 2) dotyk: stejný druh se jen podrží v hejnu (nic nemizí), jiný druh —
       //    bod menšího hejna na místě setkání je sežrán (pokud neuteče) a mizí;
@@ -976,27 +1014,38 @@
       }
       for (const b of births) spawnOne(b.species, b.x + (Math.random()-.5)*10, b.y + (Math.random()-.5)*10, b.parent);
 
-      // 4) čas od času se samy od sebe objeví nové druhy
+      // 4) čas od času se samy od sebe objeví nové druhy — nezávisle na kurzoru
       spawnTimer -= dt;
       if (spawnTimer <= 0){
         spawnTimer = 0.5 + Math.random()*0.7;
         spawnOne(Math.floor(Math.random()*COLOR.length), Math.random()*w, Math.random()*h);
       }
-      if (mouse.down && Math.random() < 0.5) spawnOne(Math.floor(Math.random()*COLOR.length), mouse.x, mouse.y);
+    }
+
+    // tón druhu s decentním individuálním posunem (lime/amber, vzácně k červené)
+    function tint(p){
+      const base = COLOR[p.species], drift = DRIFT[p.species], t = p.colorDrift;
+      return [0,1,2].map(i => Math.round(base[i] + (drift[i]-base[i])*t));
     }
 
     function draw(){
       ctx.clearRect(0, 0, w, h);
       for (const p of particles){
-        const c = COLOR[p.species];
+        const c = tint(p);
         const vitality = 0.5*p.satiety + 0.5*p.energy;
+        const breathe = 0.85 + 0.15*Math.sin(time*0.4 + p.breathPhase);
+        const tierMul = [0.55, 0.75, 1, 1.25][p.tier];
+        const active = Math.max(p.fear/FEAR_MAX, p.confidence/CONF_MAX); // glow hlavně při aktivitě, ne pořád
+        const glow = p.tier >= 2 ? 0.35 : active > 0.4 ? active*0.25 : 0;
+        if (glow > 0.02){
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${glow*breathe})`;
+          ctx.arc(p.x, p.y, POINT_R*3*tierMul, 0, Math.PI*2);
+          ctx.fill();
+        }
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.08+0.1*vitality})`;
-        ctx.arc(p.x, p.y, POINT_R*2.4, 0, Math.PI*2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.55+0.4*vitality})`;
-        ctx.arc(p.x, p.y, POINT_R, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.4+0.35*vitality)*breathe})`;
+        ctx.arc(p.x, p.y, POINT_R*tierMul*breathe, 0, Math.PI*2);
         ctx.fill();
       }
     }
@@ -1010,13 +1059,22 @@
       raf = requestAnimationFrame(loop);
     }
 
+    function pushRipple(x, y){
+      if (time - lastRipple < 0.12) return; // ať tažení nezaplaví simulaci desítkami vln za sekundu
+      lastRipple = time;
+      ripples.push({ x, y, start: time });
+      if (ripples.length > 6) ripples.shift();
+    }
     window.addEventListener('resize', () => { resize(); seed(); });
     window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
     window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
-    window.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+    window.addEventListener('pointermove', e => {
+      mouse.x = e.clientX; mouse.y = e.clientY;
+      if (mouse.down) pushRipple(e.clientX, e.clientY);
+    });
     window.addEventListener('pointerdown', e => {
       mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true;
-      spawnOne(Math.floor(Math.random()*COLOR.length), e.clientX, e.clientY);
+      pushRipple(e.clientX, e.clientY);
       if (!/^(a|button|input|label)$/i.test(e.target.tagName)) e.preventDefault();
     });
     window.addEventListener('pointerup', () => { mouse.down = false; });
