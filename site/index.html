@@ -38,7 +38,7 @@
     *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
   }
 
-  #dots{position:fixed; inset:0; z-index:0; pointer-events:none}
+  #rd, #dots{position:fixed; inset:0; z-index:0; pointer-events:none}
   .site{position:relative; z-index:1}
 
   .wrap{max-width:var(--w); margin:0 auto; padding:0 24px}
@@ -271,6 +271,7 @@
 </head>
 <body class="lang-cs">
 
+<canvas id="rd" aria-hidden="true"></canvas>
 <canvas id="dots" aria-hidden="true"></canvas>
 
 <div class="site">
@@ -795,6 +796,196 @@
      kurzor nic nespawnuje — jen jako dotyk vytvoří vlnu, která
      organismy kolem sebe na chvíli zvíří a pak se to zas uklidní. Nové
      druhy se čas od času objeví samy, na okraji populace. */
+  /* ── ambientní reakčně-difuzní textura pod organismy (Gray–Scott, WebGL2) ──
+     Plošný, pomalu se vlnící labyrintový vzor pod tečkami — ne bodovaný.
+     Kde je hustě organismů, vzor se tam probouzí silněji (obě vrstvy
+     spolu volně komunikují přes injekci bodů do V-kanálu). Bez WebGL2
+     se tahle vrstva prostě nevykreslí, bodový ekosystém běží dál beze
+     změny — je to čistě navrchní ambientní efekt, ne závislost. */
+  const rd = (function(){
+    const canvas = document.getElementById('rd');
+    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false });
+    if (!gl || !gl.getExtension('EXT_color_buffer_float')) return null;
+    const floatBlend = !!gl.getExtension('EXT_float_blend');
+
+    function compile(type, src){
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(s)); return null; }
+      return s;
+    }
+    function makeProgram(vsSrc, fsSrc){
+      const vs = compile(gl.VERTEX_SHADER, vsSrc), fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+      if (!vs || !fs) return null;
+      const p = gl.createProgram();
+      gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(p)); return null; }
+      return p;
+    }
+
+    const VS = `#version 300 es
+      in vec2 aPos; out vec2 vUv;
+      void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.0,1.0); }`;
+    const SIM_FS = `#version 300 es
+      precision highp float;
+      in vec2 vUv; out vec4 outColor;
+      uniform sampler2D uState; uniform vec2 uTexel; uniform float uF, uK;
+      void main(){
+        vec2 c = texture(uState, vUv).rg;
+        vec2 l = texture(uState, vUv - vec2(uTexel.x,0.0)).rg;
+        vec2 r = texture(uState, vUv + vec2(uTexel.x,0.0)).rg;
+        vec2 u = texture(uState, vUv - vec2(0.0,uTexel.y)).rg;
+        vec2 d = texture(uState, vUv + vec2(0.0,uTexel.y)).rg;
+        vec2 lap = l + r + u + d - 4.0*c;
+        float uu = c.r, vv = c.g;
+        float reaction = uu*vv*vv;
+        float du = 0.2097*lap.x - reaction + uF*(1.0-uu);
+        float dv = 0.105*lap.y + reaction - (uF+uK)*vv;
+        outColor = vec4(clamp(c + vec2(du,dv), 0.0, 1.0), 0.0, 1.0);
+      }`;
+    const RENDER_FS = `#version 300 es
+      precision highp float;
+      in vec2 vUv; out vec4 outColor;
+      uniform sampler2D uState;
+      void main(){
+        float v = texture(uState, vUv).g;
+        vec3 bg = vec3(0.039,0.059,0.039);
+        vec3 mid = vec3(0.03,0.06,0.09);
+        vec3 edge = vec3(0.42,1.0,0.36);
+        float body = smoothstep(0.05,0.34,v);
+        float rim = smoothstep(0.14,0.30,v) * (1.0-smoothstep(0.30,0.46,v));
+        outColor = vec4(mix(bg, mid, body*0.6) + edge*rim*0.4, 1.0);
+      }`;
+    const INJECT_VS = `#version 300 es
+      in vec2 aPos;
+      void main(){ gl_Position = vec4(aPos*2.0-1.0, 0.0, 1.0); gl_PointSize = 3.0; }`;
+    const INJECT_FS = `#version 300 es
+      precision highp float; out vec4 outColor;
+      void main(){ outColor = vec4(0.0, 0.9, 0.0, 1.0); }`;
+
+    const simProg = makeProgram(VS, SIM_FS), renderProg = makeProgram(VS, RENDER_FS), injectProg = makeProgram(INJECT_VS, INJECT_FS);
+    if (!simProg || !renderProg || !injectProg) return null;
+
+    const quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    function quadVaoFor(prog){
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      const loc = gl.getAttribLocation(prog, 'aPos');
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+      return vao;
+    }
+    const simVao = quadVaoFor(simProg), renderVao = quadVaoFor(renderProg);
+    const injectBuf = gl.createBuffer();
+    const injectVao = gl.createVertexArray();
+    gl.bindVertexArray(injectVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, injectBuf);
+    const injLoc = gl.getAttribLocation(injectProg, 'aPos');
+    gl.enableVertexAttribArray(injLoc);
+    gl.vertexAttribPointer(injLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    const simFLoc = gl.getUniformLocation(simProg, 'uF'), simKLoc = gl.getUniformLocation(simProg, 'uK');
+    const simTexelLoc = gl.getUniformLocation(simProg, 'uTexel'), simStateLoc = gl.getUniformLocation(simProg, 'uState');
+    const renderStateLoc = gl.getUniformLocation(renderProg, 'uState');
+
+    let simW = 0, simH = 0, texA, texB, fboA, fboB, texel = [0,0];
+
+    function makeTex(w, h){
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.FLOAT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    }
+    function makeFbo(tex){
+      const f = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return f;
+    }
+    function seedNoise(){
+      const data = new Float32Array(simW*simH*4);
+      for (let i=0; i<simW*simH; i++) data[i*4] = 1;
+      for (let s=0; s<12; s++){
+        const cx = Math.floor(Math.random()*simW), cy = Math.floor(Math.random()*simH);
+        for (let dy=-4; dy<=4; dy++) for (let dx=-4; dx<=4; dx++){
+          const x=cx+dx, y=cy+dy;
+          if (x<0||y<0||x>=simW||y>=simH||dx*dx+dy*dy>16) continue;
+          data[(y*simW+x)*4+1] = 1;
+        }
+      }
+      gl.bindTexture(gl.TEXTURE_2D, texA);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, simW, simH, 0, gl.RGBA, gl.FLOAT, data);
+      gl.bindTexture(gl.TEXTURE_2D, texB);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, simW, simH, 0, gl.RGBA, gl.FLOAT, data);
+    }
+    function resize(w, h){
+      canvas.width = w; canvas.height = h;
+      simH = 160; simW = Math.max(64, Math.round(simH * w / h));
+      texel = [1/simW, 1/simH];
+      texA = makeTex(simW, simH); texB = makeTex(simW, simH);
+      fboA = makeFbo(texA); fboB = makeFbo(texB);
+      seedNoise();
+    }
+
+    const injectData = new Float32Array(2 * 600);
+    function injectAt(points){
+      const n = Math.min(points.length, 600);
+      if (!n) return;
+      for (let i=0; i<n; i++){ injectData[i*2] = points[i][0]; injectData[i*2+1] = points[i][1]; }
+      gl.bindBuffer(gl.ARRAY_BUFFER, injectBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, injectData.subarray(0, n*2), gl.DYNAMIC_DRAW);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fboA);
+      gl.viewport(0, 0, simW, simH);
+      gl.useProgram(injectProg);
+      gl.bindVertexArray(injectVao);
+      if (floatBlend){ gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); }
+      gl.drawArrays(gl.POINTS, 0, n);
+      if (floatBlend) gl.disable(gl.BLEND);
+      gl.bindVertexArray(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    function step(){
+      gl.viewport(0, 0, simW, simH);
+      gl.useProgram(simProg);
+      gl.bindVertexArray(simVao);
+      gl.uniform2fv(simTexelLoc, texel);
+      gl.uniform1f(simFLoc, 0.037);
+      gl.uniform1f(simKLoc, 0.0615);
+      for (let i=0; i<2; i++){
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texA);
+        gl.uniform1i(simStateLoc, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        [texA, texB] = [texB, texA];
+        [fboA, fboB] = [fboB, fboA];
+      }
+      gl.bindVertexArray(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    function render(){
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(renderProg);
+      gl.bindVertexArray(renderVao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texA);
+      gl.uniform1i(renderStateLoc, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.bindVertexArray(null);
+    }
+    return { resize, step, render, injectAt };
+  })();
+
   (function(){
     const canvas = document.getElementById('dots');
     const ctx = canvas.getContext('2d');
@@ -842,6 +1033,7 @@
       canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr);
       canvas.style.width = w+'px'; canvas.style.height = h+'px';
       ctx.setTransform(dpr,0,0,dpr,0,0);
+      if (rd) rd.resize(canvas.width, canvas.height);
     }
 
     // vizuální hierarchie: většina bodů je malá a tlumená, jen hrstka výrazná/vzácná
@@ -1073,6 +1265,11 @@
       last = now;
       step(dt);
       draw();
+      if (rd){
+        rd.injectAt(particles.map(p => [p.x/w, 1 - p.y/h]));
+        rd.step();
+        rd.render();
+      }
       raf = requestAnimationFrame(loop);
     }
 
@@ -1098,7 +1295,7 @@
 
     resize();
     seed();
-    if (reduced) draw(); else raf = requestAnimationFrame(loop);
+    if (reduced) { draw(); if (rd) rd.render(); } else raf = requestAnimationFrame(loop);
   })();
 </script>
 </body>
