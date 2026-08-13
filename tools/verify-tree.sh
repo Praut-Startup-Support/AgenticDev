@@ -37,6 +37,12 @@ for f in brand/logo.svg brand/mark.svg brand/icon.svg brand/agenticdev.ico; do c
 
 echo "── dokumenty ──"
 chk HANDOFF.md              "handoff"
+chk CHANGELOG.md            "changelog"
+chk CODE_OF_CONDUCT.md      "pravidla chování"
+chk SUPPORT.md              "kam s dotazem"
+chk .github/dependabot.yml  "hlídání závislostí"
+chk .github/CODEOWNERS      "kdo review na co"
+chk .editorconfig           "editorconfig"
 chk DEPLOY.md               "postup nasazení"
 # Odkazuje na něj README v obou jazycích.
 chk docs/tri-pozadavky.md   "tři požadavky a co je vynucuje"

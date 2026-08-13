@@ -7,34 +7,12 @@ Poslední aktualizace: 11. 8. 2026
 
 ---
 
-## 1. Rozhodnutí, které blokuje zbytek
+## 1. Jak se produkt jmenuje
 
-**Jak se produkt jmenuje?**
-
-Teď je to rozjeté:
-
-| Kde | Co tam stojí |
-|---|---|
-| `LICENSE` → `Licensed Work` | `AgenticDev` |
-| `README.md`, `README.cs.md` nadpis | `AgenticDev` |
-| repozitář, web, doména | `AgenticDev` |
-
-`Licensed Work` v licenci je **právní identifikátor** — určuje, co přesně je
-licencováno. Musí sedět s tím, jak se produkt reálně jmenuje, jinak je
-licence napadnutelná.
-
-Až padne rozhodnutí, sjednotit jedním průchodem:
-
-```bash
-# varianta A — produkt se jmenuje AgenticDev
-grep -rl "AgenticDev" --include="*.md" LICENSE . \
-  | xargs sed -i 's/AgenticDev/AgenticDev/g'
-
-# varianta B — produkt zůstává AgenticDev, AgenticDev je jen repo
-# (pak není co měnit, jen zkontrolovat, že to web nemate)
-```
-
-Pozor: `Praut s.r.o.` jako licencor se **nemění** ani v jedné variantě.
+**Rozhodnuto: AgenticDev.** Sedí to v `LICENSE` (`Licensed Work`), v obou
+README, v repozitáři, na webu i v doméně. `Licensed Work` je právní
+identifikátor — kdyby se jméno měnilo, musí se změnit i tam, jinak je
+licence napadnutelná. Licencor `Praut s.r.o.` se nemění nikdy.
 
 ---
 
@@ -69,7 +47,9 @@ se kód parsuje:
 7. Klik na ikonu → naběhne pod → agent odpoví
 8. Zápis mimo scope musí selhat na EROFS
 9. Linux klient, Windows klient
-10. `git tag v0.1.0` → workflow → draft release
+10. `git tag v0.1.0` → workflow → draft release → **publikovat ho**.
+    Dokud je release draft, `releases/latest/download/…` vrací 404 a
+    instalace podle README nefunguje nikomu.
 
 ---
 
@@ -115,8 +95,12 @@ Pořadí, v jakém by se to mělo řešit, je v README v sekci o omezeních.
 - [ ] Settings → Pages → Source: **GitHub Actions**
 - [ ] Settings → Actions → Workflow permissions: **Read and write**
 - [ ] Topics a Website v About na GitHubu
-- [ ] Licenci nechat projít právníkem — BSL s příjmovou hranicí je obchodní
-      rozhodnutí, ne technické
+- [ ] **Licenci nechat projít právníkem** — BSL s příjmovou hranicí je obchodní
+      rozhodnutí, ne technické. Nově je v `Additional Use Grant` i podmínka
+      uvedení autora (bod b); ta je napsaná tak, aby její porušení ukončilo
+      bezplatný grant, ale formulaci ať vidí právník, než na ni někoho
+      upozorníš. Platí od té verze, ve které vyšla — dřív vydané verze si
+      nesou podmínky, se kterými byly vydané.
 
 ---
 

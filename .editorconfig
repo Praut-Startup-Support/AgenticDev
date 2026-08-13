@@ -1,0 +1,41 @@
+# https://editorconfig.org
+#
+# Drží odsazení a konce řádků napříč editory. Repozitář je hlavně shell a
+# Python, k tomu dva velké HTML soubory s vloženým JS.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.py]
+indent_size = 4
+max_line_length = 88
+
+[*.{sh,bash}]
+indent_size = 2
+
+# Makefile na tabulátorech stojí — mezera v receptu je chyba, ne styl.
+[Makefile]
+indent_style = tab
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.md]
+# Dva mezery na konci řádku jsou v Markdownu zalomení. Ořezávat je znamená
+# tiše měnit sazbu textu.
+trim_trailing_whitespace = false
+
+[*.{html,js,json}]
+indent_size = 2
+
+# Vygenerované a cizí soubory nesahat.
+[{LICENSE,*.svg,*.ico,*.png}]
+insert_final_newline = false
+trim_trailing_whitespace = false

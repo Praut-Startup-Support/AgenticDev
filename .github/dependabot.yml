@@ -1,0 +1,66 @@
+# Hlídání závislostí.
+#
+# U produktu, který se nasazuje k zákazníkům, je zastaralá závislost s CVE
+# jejich problém, ne náš — a dozvědět se o něm z novin je ta dražší varianta.
+#
+# Otevřených PR držíme málo schválně: pět zanedbatelných aktualizací týdně
+# nikdo nemerguje a za měsíc se na Dependabota přestane koukat úplně.
+version: 2
+updates:
+  # ─── GitHub Actions ve workflow ──────────────────────────────
+  # Tady se aktualizuje ochotně: `actions/checkout@v4` je pinovaný na major
+  # a rozbít se toho moc nedá.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+
+  # ─── Python control plane ────────────────────────────────────
+  # requirements.txt je pinovaný na minor (fastapi==0.115.*), takže sem
+  # chodí hlavně bezpečnostní záplaty.
+  - package-ecosystem: pip
+    directory: "/control-plane"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps"
+    labels:
+      - dependencies
+
+  # ─── Obrazy v podu ───────────────────────────────────────────
+  # Pod je to, v čem běží agent nad klientským kódem. Základní obraz se
+  # tady drží aktuální i za cenu občasného přestavění.
+  - package-ecosystem: docker
+    directory: "/pod"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps"
+    labels:
+      - dependencies
+
+  - package-ecosystem: docker
+    directory: "/control-plane"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps"
+    labels:
+      - dependencies
+
+# POZOR na to, co tu NENÍ: obrazy ve `vps/docker-compose.yml` jsou tažené
+# přes proměnné (${POSTGRES_TAG}, ${FORGEJO_TAG}…), takže je Dependabot
+# neumí přečíst. Jejich verze se kontrolují ručně — je to položka v
+# HANDOFF.md, ne opomenutí.

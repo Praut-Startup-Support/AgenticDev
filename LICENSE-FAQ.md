@@ -24,6 +24,19 @@ veřejný, můžeš si ho číst, měnit i šířit, ale produkční použití m
 | Provoz ve firmě s obratem **do 1 000 000 EUR** za posledních 12 měsíců | ✅ ano |
 | Číst kód, forkovat, posílat příspěvky | ✅ vždy |
 
+### Ale musíš uvést autora
+
+Bezplatné použití je podmíněné tím, že necháš na viditelném místě uvedení
+**„AgenticDev — © Praut s.r.o."**, a kde to jde, i odkaz na projekt:
+
+- v administračním rozhraní, na stránce dostupné z hlavní navigace;
+- v dokumentaci, kterou k tomu šíříš;
+- v hlavičkách zdrojových souborů — ty se nesmí odstraňovat ani přepisovat.
+
+Když to uvedení odstraníš nebo schováš, bezplatný grant tím pro tebe končí
+a na produkční provoz potřebuješ komerční licenci. U instance, kterou nikomu
+jinému nezpřístupňuješ, se v rozhraní nic uvádět nemusí.
+
 ### Potřebuješ komerční licenci
 
 | Situace | Zdarma? |
@@ -68,6 +81,21 @@ use has a threshold.
 | Personal projects, education, academic research | ✅ always |
 | Production use at an organization with **under EUR 1,000,000** annual revenue | ✅ yes |
 | Reading the code, forking, contributing | ✅ always |
+
+### But you must credit the author
+
+Free use is conditional on keeping a clearly legible attribution reading
+**"AgenticDev — © Praut s.r.o."**, linked to the project where the medium
+allows it:
+
+- in the administrative interface, on a page reachable from its main navigation;
+- in any documentation you distribute alongside it;
+- in the copyright notices in the source files — those must not be removed
+  or altered.
+
+Removing or obscuring that attribution ends the free grant for you, and
+production use then needs a commercial licence. On an instance you do not
+make available to anyone else, no attribution is required in the interface.
 
 ### Requires a commercial licence
 

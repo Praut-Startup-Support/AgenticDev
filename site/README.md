@@ -34,7 +34,44 @@ Cíl    praut-startup-support.github.io.
 TTL    3600
 ```
 
-Tečka na konci cíle tam patří.
+Tečka na konci cíle tam patří. **Cíl je jméno účtu, ne produktu** — účet je
+`Praut-Startup-Support`, takže Pages jede na `praut-startup-support.github.io`.
+
+#### Ověř, kam doména doopravdy míří
+
+```bash
+dig +short agenticdev.praut.cz
+```
+
+| Co uvidíš | Co to znamená |
+|---|---|
+| `185.199.108.153` … `.111.153` | ✅ míří rovnou na GitHub Pages, tak to má být |
+| `104.21.x.x`, `172.67.x.x` | ⚠️ **Cloudflare proxy** (oranžový mrak) — viz níž |
+| cokoli jiného | ❌ míří jinam, web se nezobrazí |
+
+**Když je tam Cloudflare**, GitHub Pages si nemůže vydat vlastní certifikát,
+protože ověřovací požadavek skončí na Cloudflare, ne u GitHubu. Máš dvě
+možnosti:
+
+1. **Vypnout proxy** (v Cloudflare přepnout záznam na šedý mrak, „DNS only").
+   Pak si GitHub vydá certifikát sám a v Settings → Pages půjde zaškrtnout
+   *Enforce HTTPS*. Tohle je jednodušší a doporučuju to.
+2. **Nechat proxy zapnutou** a v Cloudflare nastavit SSL/TLS mód na **Full**.
+   Při „Flexible" vznikne přesměrovací smyčka, při „Off" to pojede po HTTP.
+   *Enforce HTTPS* na straně GitHubu pak nech vypnuté.
+
+Než certifikát naběhne, počítej s desítkami minut. Do té doby může stránka
+hlásit chybu certifikátu, i když je jinak nasazená správně.
+
+#### Ověř, že se to vůbec nasadilo
+
+```bash
+curl -sSI https://praut-startup-support.github.io/AgenticDev/ | head -1
+```
+
+Tahle adresa jede vždycky, i bez vlastní domény. Když vrátí `200`, web je
+nasazený a problém je jen v DNS nebo certifikátu. Když vrátí `404`, nenaběhlo
+nasazení — koukni do Actions → *pages*.
 
 ### 3. Zapni Pages
 

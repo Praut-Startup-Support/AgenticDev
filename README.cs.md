@@ -1,5 +1,10 @@
 # AgenticDev
 
+[![test](https://github.com/Praut-Startup-Support/AgenticDev/actions/workflows/test.yml/badge.svg)](https://github.com/Praut-Startup-Support/AgenticDev/actions/workflows/test.yml)
+[![release](https://img.shields.io/github/v/release/Praut-Startup-Support/AgenticDev?include_prereleases&sort=semver)](https://github.com/Praut-Startup-Support/AgenticDev/releases)
+[![licence: BSL 1.1](https://img.shields.io/badge/licence-BSL%201.1-blue)](LICENSE)
+[![status: alpha](https://img.shields.io/badge/status-alpha-orange)](#)
+
 **Vlastní agentní vývojová platforma.** Server drží všechna data, kontext,
 orchestraci — a i samotné agenty. Agent běží v izolovaném kontejneru **na
 VPS**, ne na stroji vývojáře ([ADR-0005](docs/adr/0005-pod-bezi-na-vps.md)):
@@ -280,8 +285,10 @@ _phase/<fáze>/  scope + doplněk AGENTS.md
 **Business Source License 1.1** — source-available, ne OSI open source.
 
 Zdarma pro vyzkoušení, vývoj, výuku a produkční provoz ve firmách s obratem
-**do 1 000 000 EUR**. Větší firmy potřebují komerční licenci. Každá verze se
-**čtyři roky po vydání mění na Apache-2.0**.
+**do 1 000 000 EUR**, **pokud zachováš uvedení autora** „AgenticDev — © Praut
+s.r.o." v administračním rozhraní, v dokumentaci a v hlavičkách zdrojových
+souborů. Větší firmy potřebují komerční licenci. Každá verze se **čtyři roky
+po vydání mění na Apache-2.0**.
 
 Vysvětlení lidsky, česky i anglicky: [LICENSE-FAQ.md](LICENSE-FAQ.md).
 Závazné znění: [LICENSE](LICENSE).
@@ -374,3 +381,7 @@ otestovat.
 Viz [CONTRIBUTING.md](CONTRIBUTING.md). Příspěvky vyžadují podepsání CLA,
 protože projekt je dvojlicencovaný a nemůžeme prodávat komerční licence na
 kód, ke kterému nemáme práva.
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — jedno pravidlo a pár příkladů
+- [SUPPORT.md](SUPPORT.md) — kam s dotazem, s chybou a s bezpečnostní dírou
+- [CHANGELOG.md](CHANGELOG.md) — co se kdy změnilo

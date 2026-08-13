@@ -9,15 +9,37 @@ Licensed Work:        AgenticDev
                       The Licensed Work is (c) 2026 Praut s.r.o.
 
 Additional Use Grant: You may make production use of the Licensed Work,
-                      provided that the total annual gross revenue of your
+                      provided that BOTH of the following are true:
+
+                      (a) REVENUE. The total annual gross revenue of your
                       organization, together with all of its affiliates, did
                       not exceed EUR 1,000,000 (one million euro) in the
                       preceding twelve (12) months.
 
+                      (b) ATTRIBUTION. You retain a clearly legible
+                      attribution reading "AgenticDev — (c) Praut s.r.o.",
+                      linking to the project where the medium allows it, in
+                      each of the following places, to the extent they exist
+                      in your deployment or distribution:
+
+                        - the administrative interface of the Licensed Work,
+                          on a page reachable from its main navigation;
+                        - any documentation you distribute that describes the
+                          Licensed Work;
+                        - the copyright and licence notices contained in the
+                          source code, which you must not remove or alter.
+
+                      Removing or obscuring that attribution ends this
+                      Additional Use Grant for you, and production use then
+                      requires a commercial licence.
+
                       Non-production use is always permitted, including
                       evaluation, development, testing, and use for personal,
                       educational, academic, or non-commercial purposes,
-                      regardless of revenue.
+                      regardless of revenue. Condition (b) applies to
+                      non-production use as well, save that no attribution is
+                      required in an interface you do not make available to
+                      anyone else.
 
                       This grant does not permit offering the Licensed Work to
                       third parties as a hosted or managed service whose

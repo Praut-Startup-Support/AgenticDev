@@ -1,5 +1,10 @@
 # AgenticDev
 
+[![test](https://github.com/Praut-Startup-Support/AgenticDev/actions/workflows/test.yml/badge.svg)](https://github.com/Praut-Startup-Support/AgenticDev/actions/workflows/test.yml)
+[![release](https://img.shields.io/github/v/release/Praut-Startup-Support/AgenticDev?include_prereleases&sort=semver)](https://github.com/Praut-Startup-Support/AgenticDev/releases)
+[![licence: BSL 1.1](https://img.shields.io/badge/licence-BSL%201.1-blue)](LICENSE)
+[![status: alpha](https://img.shields.io/badge/status-alpha-orange)](#)
+
 **Self-hosted agentic development platform.** One VPS holds all data,
 context, orchestration — and the agents themselves. Developers connect to
 it over SSH and work in a disposable container, with instructions, scope,
@@ -423,9 +428,11 @@ See [SECURITY.md](SECURITY.md) for the security implications.
 **Business Source License 1.1** — source-available, not OSI open source.
 
 Free for evaluation, development, education, and production use at
-organizations under **EUR 1,000,000** annual revenue. Larger organizations
-need a commercial licence. Every version converts to **Apache-2.0 four years
-after release**.
+organizations under **EUR 1,000,000** annual revenue, **provided you keep the
+attribution** “AgenticDev — © Praut s.r.o.” in the admin interface, in the
+docs you ship, and in the source headers. Larger organizations need a
+commercial licence. Every version converts to **Apache-2.0 four years after
+release**.
 
 Plain-language explanation in both languages: [LICENSE-FAQ.md](LICENSE-FAQ.md).
 Binding text: [LICENSE](LICENSE).
@@ -456,3 +463,7 @@ process, and a test checklist.
 See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions require a CLA, because
 the project is dual-licensed and we cannot sell commercial licences for code
 we do not hold the rights to.
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — one rule and a few examples
+- [SUPPORT.md](SUPPORT.md) — where to take a question, a bug, or a hole
+- [CHANGELOG.md](CHANGELOG.md) — what changed and when

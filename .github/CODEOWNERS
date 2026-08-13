@@ -1,0 +1,34 @@
+# Kdo se musí podívat na co.
+#
+# Účet vlastníka je dnes jeden, takže to zatím není rozdělení práce — je to
+# záruka, že se nic z citlivých míst neprojde bez review. Až přibudou lidi,
+# mění se tady jen jména vpravo.
+
+# Výchozí: cokoli.
+*                           @Praut-Startup-Support
+
+# ─── Místa, kde chyba stojí nejvíc ───────────────────────────────
+# Sandbox a to, co v něm vynucuje hranice. Chyba tady znamená agenta bez
+# ohrady nad klientským kódem.
+/pod/                       @Praut-Startup-Support
+
+# Bindy vnitřních služeb. Jedna špatná adresa = Postgres na internetu.
+/vps/docker-compose.yml     @Praut-Startup-Support
+/vps/Caddyfile              @Praut-Startup-Support
+
+# Instalace: běží jako root na cizím stroji.
+/install.sh                 @Praut-Startup-Support
+/install-vps.sh             @Praut-Startup-Support
+/vps/agenticdev-ctl         @Praut-Startup-Support
+
+# Auditní stopa a migrace schématu. Append-only se dá zrušit jedním DDL.
+/vps/sql/                   @Praut-Startup-Support
+/control-plane/app/migrate.py @Praut-Startup-Support
+
+# Scope fází — tohle rozhoduje, kam smí agent zapsat.
+/workspace/_phase/          @Praut-Startup-Support
+
+# Licence a právní texty. Nemění se mimochodem v jiném PR.
+/LICENSE                    @Praut-Startup-Support
+/LICENSE-FAQ.md             @Praut-Startup-Support
+/SECURITY.md                @Praut-Startup-Support
