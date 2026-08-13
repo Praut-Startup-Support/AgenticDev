@@ -117,8 +117,15 @@ def auth_device(body: DeviceAuth):
 # ═══════════════════════════════════════════════════════════════
 #  Work order
 # ═══════════════════════════════════════════════════════════════
-def _pick_director(c, project: dict, phase_kind: str, task_kind: str, channel: str) -> dict:
-    """Výběr podle projekt × fáze × druh úkolu. Override projektu vyhrává."""
+def _pick_director(c, project: dict, phase_kind: str, task_kind: str, channel: str) -> dict | None:
+    """
+    Výběr podle projekt × fáze × druh úkolu. Override projektu vyhrává.
+
+    Vrací None, když žádný záznam nesedí. Dřív to bylo 409, ale postup úkolu
+    dneska vynucuje harness a `director_version` je jen přišpendlení verzí
+    (ADR-0003) — chybějící řádek pro `bugfix-director` tedy nesmí zabránit
+    vydání work orderu.
+    """
     override = (project.get("director_overrides") or {}).get(f"{phase_kind}.{task_kind}")
     director_id = override or f"{task_kind}-director"
     row = c.execute(
@@ -129,9 +136,13 @@ def _pick_director(c, project: dict, phase_kind: str, task_kind: str, channel: s
            LIMIT 1""",
         (director_id, _visible_channels(channel)),
     ).fetchone()
-    if not row:
-        raise HTTPException(409, f"není nasazený director '{director_id}' pro kanál {channel}")
-    return row
+    if row:
+        return row
+    # Kterýkoli nasazený, ať se práce nezastaví na chybějícím číselníku.
+    return c.execute(
+        """SELECT * FROM director_version WHERE channel = ANY(%s)
+           ORDER BY released_at DESC LIMIT 1""",
+        (_visible_channels(channel),)).fetchone()
 
 
 def _visible_channels(ws_channel: str) -> list[str]:
@@ -220,15 +231,16 @@ def next_work_order(ws: dict = Depends(current_ws)):
             "context_bundle": bundle,
             "runtime": {
                 "compose": {"ref": f"pods/{task['code']}/compose.yaml@main"},
-                "harness": {"image": harness["image_digest"], "api_version": harness["semver"]},
-                "director": {
+                "harness": ({"image": harness["image_digest"],
+                             "api_version": harness["semver"]} if harness else None),
+                "director": ({
                     "id": director["director_id"],
                     "version": director["semver"],
                     "channel": director["channel"],
                     "uri": director["uri"],
                     "sha256": director["sha256"],
                     "requires_harness": director["requires_harness"],
-                },
+                } if director else None),
             },
             "worker_pool": [
                 {"role": r, "profile": f"{r}@0.1.0"}
@@ -257,7 +269,9 @@ def next_work_order(ws: dict = Depends(current_ws)):
                  (id, assignment_id, manifest, manifest_hash, director_ver, harness_ver, expires_at)
                VALUES (%s,%s,%s,%s,%s,%s,%s)""",
             (manifest["work_order_id"], assignment["id"], json.dumps(manifest),
-             hashlib.sha256(payload).hexdigest(), director["id"], harness["id"], expires),
+             hashlib.sha256(payload).hexdigest(),
+             director["id"] if director else None,
+             harness["id"] if harness else None, expires),
         )
         _emit(c, ws["principal_id"], "task", str(task["task_id"]), "assigned",
               {"work_order": manifest["work_order_id"]}, manifest["work_order_id"])
@@ -506,6 +520,7 @@ _POD_FILES = {
     "egress/Dockerfile":    "text/plain",
     "egress/entrypoint.sh": "text/x-shellscript",
     "harness/harness.py":   "text/x-python",
+    "harness/director.py":  "text/x-python",
 }
 
 

@@ -192,7 +192,8 @@ def materialize(p: dict) -> None:
 # ═══════════════════════════════════════════════════════════════
 #  Agent
 # ═══════════════════════════════════════════════════════════════
-def run_agent(p: dict) -> int:
+def _agent_env(p: dict) -> dict:
+    """Prostředí agenta. Používá to interaktivní session i director."""
     env = os.environ.copy()
     env.update({
         "AGENTICDEV_PROJECT": p["project"],
@@ -222,6 +223,12 @@ def run_agent(p: dict) -> int:
     pi_dir = env.get("PI_CODING_AGENT_DIR")
     if pi_dir and not (pathlib.Path(pi_dir) / "auth.json").is_file():
         print(f"{C_WARN}  V {pi_dir} není auth.json — v Pi se přihlas přes /login.{C_OFF}")
+
+    return env
+
+
+def run_agent(p: dict) -> int:
+    env = _agent_env(p)
 
     agent = shutil.which("pi")
     if not agent:
@@ -276,6 +283,19 @@ def main() -> int:
     print(f"  {C_DIM}{'─' * 44}{C_OFF}")
     if p["data_class"] == "restricted":
         print(f"  {C_WARN}Citlivá data — cloudové modely jsou tu zakázané.{C_OFF}")
+
+    # S work orderem jede úkol podle postupu, který vynucuje director
+    # (ADR-0003): kontroly projektu rozhodují, ne agent. Bez work orderu
+    # není co vynucovat, takže se otevře interaktivní session.
+    if p.get("work_order_id") and (p.get("task") or {}).get("id"):
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        try:
+            import director
+        except ImportError as e:
+            print(f"  {C_WARN}director.py chybí ({e}) — otevírám interaktivní session.{C_OFF}")
+            return run_agent(p)
+        print(f"  {C_DIM}úkol{C_OFF} {p['task'].get('title', '?')}")
+        return 0 if director.drive(p, _agent_env(p)) in ("done", "review") else 1
 
     return run_agent(p)
 

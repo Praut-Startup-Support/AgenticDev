@@ -21,8 +21,8 @@ RUN npm install -g @earendil-works/pi-coding-agent \
 RUN mkdir -p /run/agenticdev /ctx /workspace \
     && chown -R node:node /run/agenticdev
 
-COPY harness/harness.py /opt/agenticdev/harness.py
-RUN chmod 0555 /opt/agenticdev/harness.py
+COPY harness/harness.py harness/director.py /opt/agenticdev/
+RUN chmod 0555 /opt/agenticdev/harness.py /opt/agenticdev/director.py
 
 USER node
 WORKDIR /workspace

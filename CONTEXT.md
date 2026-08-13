@@ -37,10 +37,11 @@ Viz [ADR-0005](docs/adr/0005-pod-bezi-na-vps.md).
 ## Director
 
 Postup, kterým musí úkol projít, a limity, kolik se smí opakovat.
-Vynucuje ho harness uvnitř podu, ne server. Selhání fáze se zapíše do
-ledgeru a zkusí se opravit; když se to povede, pokračuje se dál, a když
-se limit z work orderu vyčerpá, úkol jde do `blocked`. Přes fázi, která
-zůstala neopravená, se nepokračuje.
+Vynucuje ho harness uvnitř podu, ne server: po každém kole spustí
+**kontroly projektu** a podle nich se rozhodne dál — o tom, že je hotovo,
+nerozhoduje agent. Selhání se zapíše do ledgeru a zkusí se opravit; po
+vyčerpání limitu z work orderu jde úkol do `blocked`. Přes neopravené
+kontroly se nepokračuje.
 
 _Vyhýbej se_: „orchestrátor", „workflow" (to je běh v Actions).
 Pozor: tabulka `director_version` v databázi popisuje directora jako

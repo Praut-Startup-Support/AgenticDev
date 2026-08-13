@@ -50,6 +50,7 @@ echo "── pod (sandbox) ──"
 chk pod/compose.yaml          "compose"
 chk pod/Dockerfile            "obraz podu"
 chk pod/harness/harness.py    "harness"
+chk pod/harness/director.py   "director (postup úkolu)"
 chk pod/egress/Dockerfile     "obraz egress"
 chk pod/egress/entrypoint.sh  "egress allowlist"
 

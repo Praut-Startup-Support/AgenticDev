@@ -165,7 +165,8 @@ DEC
   if [[ ! -f "$pod_dir/compose.yaml" ]]; then
     c "Stahuji definici podu"
     mkdir -p "$pod_dir/egress" "$pod_dir/harness"
-    for f in compose.yaml Dockerfile egress/Dockerfile egress/entrypoint.sh harness/harness.py; do
+    for f in compose.yaml Dockerfile egress/Dockerfile egress/entrypoint.sh \
+             harness/harness.py harness/director.py; do
       curl -fsSL "$CONTROL_PLANE/pod/$f" -o "$pod_dir/$f" \
         || die "Nepodařilo se stáhnout pod/$f z VPS."
     done
@@ -205,18 +206,37 @@ DEC
   local allow; allow=$(echo "$b" | jq -r '.egress_allowlist // [] | join(",")')
   [[ -n "$allow" ]] && allow="$cp_host,$allow" || allow="$cp_host"
 
+  # Work order. Bez něj do podu nedorazí limity opakování ani human gate,
+  # takže by director neměl co vynucovat (ADR-0003). Když žádný úkol není
+  # ready, pracuje se interaktivně jako dřív.
+  local wo wo_id="" wo_policy="null" wo_task="null"
+  wo=$(curl -fsS "$CONTROL_PLANE/v1/work-orders/next" -H "Authorization: Bearer $t" 2>/dev/null || true)
+  if [[ -n "$wo" ]] && ! jq -e '.work_order == null' >/dev/null 2>&1 <<<"$wo"; then
+    wo_id=$(jq -r '.work_order.work_order_id // ""' <<<"$wo")
+    wo_policy=$(jq -c '.work_order.policy // null' <<<"$wo")
+    wo_task=$(jq -c '.work_order.task // null' <<<"$wo")
+    c "Work order $(cut -c1-8 <<<"$wo_id") — $(jq -r '.work_order.task.title // "?"' <<<"$wo")"
+  else
+    warn "žádný úkol ve stavu ready — otevřu interaktivní session"
+  fi
+
   local lease_h; lease_h=$(echo "$b" | jq -r '.lease_hours // 4')
   # `model` tu není: vybírá si ho člověk v Pi a umí ho přepnout za běhu,
   # takže by policy nesla údaj, který za chvíli neplatí. Hranicí je egress
   # (ADR-0004).
   echo "$b" | jq \
-      --arg cp "$CONTROL_PLANE" --arg br "$branch" \
+      --arg cp "$CONTROL_PLANE" --arg br "$branch" --arg wo "$wo_id" \
+      --argjson wop "$wo_policy" --argjson wot "$wo_task" \
       --argjson dl "$(( $(date +%s) + lease_h * 3600 ))" \
       '{project: .project.code, client: .project.client, phase: .project.phase,
         data_class: .project.data_class, model_allowlist: .project.model_allowlist,
         scope: .scope,
         egress: (.egress_allowlist // []), budget_tokens: (.budget_tokens // null),
-        control_plane: $cp, branch: $br, deadline_ts: $dl}' > "$ctx/policy.json"
+        control_plane: $cp, branch: $br, deadline_ts: $dl,
+        work_order_id: (if $wo == "" then null else $wo end),
+        task: $wot,
+        max_loop_iterations: ($wop.max_loop_iterations // null),
+        human_gate: ($wop.human_gate // [])}' > "$ctx/policy.json"
 
   # Přihlášení k modelu a sessions toho člověka. Adresář musí existovat
   # dřív, než ho Docker připojí — jinak ho vyrobí jako root a Pi si do něj
@@ -281,6 +301,25 @@ ENVF
       git -C "$ws" push -q -u origin "$branch" 2>/dev/null \
         && ok "odesláno" || warn "push se nepovedl — zkus ručně: git -C $ws push -u origin $branch"
     fi
+  fi
+
+  # Výsledek od directora. Co rozhodly kontroly projektu, ne agent.
+  if [[ -n "${wo_id:-}" ]]; then
+    local outcome="aborted"
+    [[ -f "$ws/.agenticdev/outcome" ]] && outcome=$(tr -d '\n' < "$ws/.agenticdev/outcome")
+    case "$outcome" in
+      done|review) ok "postup dojel: $outcome" ;;
+      blocked)     warn "úkol jde do blocked — kontroly po limitu pořád padaly" ;;
+      *)           warn "postup nedojel do konce ($outcome)" ;;
+    esac
+    # 'review' i 'done' znamenají pro control plane jedno: práce je na
+    # člověku. Stav done nastaví až merge PR (ADR-0006).
+    local rel="done"; [[ "$outcome" == "blocked" ]] && rel="blocked"
+    [[ "$outcome" == "aborted" ]] && rel="aborted"
+    curl -fsS -X POST "$CONTROL_PLANE/v1/work-orders/$wo_id/release?outcome=$rel" \
+      -H "Authorization: Bearer $t" >/dev/null 2>&1 \
+      || warn "release work orderu se nepovedl"
+    rm -f "$ws/.agenticdev/outcome"
   fi
 
   # Agent dokončil úkol přes `agenticdev-git finish`. Ten nepushuje ani

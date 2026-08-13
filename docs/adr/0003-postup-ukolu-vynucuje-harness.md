@@ -20,6 +20,24 @@ Postup úkolu — plán, test, implementace, review, hotovo — a limity
 opakování vynucuje **harness uvnitř podu**. Zvlášť verzovaný director
 runtime se nestaví.
 
+## Co je tím vynucené
+
+Postup nejsou instrukce pro agenta — ty si může přečíst a neposlechnout.
+Po každém kole se spustí **kontroly projektu** (testy podle toho, co v
+repozitáři je) a podle jejich výsledku se rozhoduje dál. O tom, že je
+hotovo, tedy nerozhoduje agent.
+
+| Co | Jak |
+|---|---|
+| pořadí fází | plán → implementace → kontroly → human gate |
+| strop opakování | `max_loop_iterations` z work orderu; po vyčerpání `blocked` |
+| že se nepokračuje přes selhané kontroly | výsledek kontrol, ne tvrzení agenta |
+| že rizikovou změnu odklikne člověk | `human_gate` se hledá v diffu, ne v tom, co agent říká |
+
+Nevynucená zůstává kvalita testů. Když je projekt nemá, kontroly nemají co
+spustit a řekne se to nahlas; druhou pojistkou je brána před mergem na
+serveru (ADR-0006).
+
 ## Důsledky
 
 `director_version` zůstává v databázi jako kompatibilní přišpendlení
