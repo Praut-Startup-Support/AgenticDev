@@ -45,6 +45,17 @@ jobs:
       - name: Parse Python
         run: python3 -c "import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]" control-plane/app/*.py
 
+  # ── Git automatizace je to, co obsluhuje lidi bez znalosti gitu ────
+  # Běží na dočasném repozitáři v /tmp, nic mimo něj nesahá. Bez téhle
+  # úlohy by se regrese v `agenticdev-git` poznala až tím, že někomu
+  # zmizí rozdělaná práce nebo uvázne v rozděleném rebase.
+  git:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: make test-git
+        run: make test-git
+
   # ── Build musí být deterministický ─────────────────────────────────
   reproducible:
     runs-on: ubuntu-latest
