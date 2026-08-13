@@ -2,6 +2,12 @@
 fail=0
 chk(){ if [[ -e "$1" ]]; then echo "  ✓ $2"; else echo "  ✗ CHYBÍ: $1"; fail=1; fi; }
 
+# Věci z `.github/` do instalačního artefaktu nepatří — mk-dist ten adresář
+# schválně vynechává, na cizím VPS nemá co dělat CI konfigurace ani šablony
+# issues. Kontrolují se tedy jen ve zdrojovém stromě, jinak by `--check`
+# vydaného artefaktu hlásil chybějící soubory, které tam být nemají.
+chk_repo(){ if [[ -d .github ]]; then chk "$1" "$2"; else echo "  – $2 (není v artefaktu, správně)"; fi; }
+
 echo "── VPS ──"
 for f in vps/docker-compose.yml vps/Caddyfile vps/sql/001_schema.sql \
          vps/sql/002_seed.sql vps/backup/restic-backup.sh install-vps.sh \
@@ -40,8 +46,8 @@ chk HANDOFF.md              "handoff"
 chk CHANGELOG.md            "changelog"
 chk CODE_OF_CONDUCT.md      "pravidla chování"
 chk SUPPORT.md              "kam s dotazem"
-chk .github/dependabot.yml  "hlídání závislostí"
-chk .github/CODEOWNERS      "kdo review na co"
+chk_repo .github/dependabot.yml "hlídání závislostí"
+chk_repo .github/CODEOWNERS     "kdo review na co"
 chk .editorconfig           "editorconfig"
 chk DEPLOY.md               "postup nasazení"
 # Odkazuje na něj README v obou jazycích.
