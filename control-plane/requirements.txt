@@ -1,4 +1,4 @@
-fastapi==0.115.*
+fastapi==0.141.*
 uvicorn[standard]==0.34.*
 psycopg[binary]==3.2.*
 pydantic==2.*
