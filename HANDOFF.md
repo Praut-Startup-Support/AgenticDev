@@ -59,6 +59,8 @@ se kód parsuje:
 1. `bash tools/preflight-vps.sh` na čistém VPS
 2. Server podle [DEPLOY.md](DEPLOY.md), bez znalostí navíc
 3. `agenticdev-ctl smoke` — musí projít celý
+3b. `agenticdev-ctl gate <projekt>` — na prvním PR. Musí ukázat, že se
+   požadovaná jména statusů potkávají s vydanými. Když ne, `--fix` a znovu.
 4. `curl https://<host>.ts.net:8443/health` z mobilních dat (ne z tailnetu).
    Funnel připojuje `/join` na korytko `/`, takže veřejná cesta ke
    health je `/health`, ne `/join/health`.
@@ -95,8 +97,9 @@ Jsou popsané v README i SECURITY.md. Nejsou to překvapení, ale nedělej,
 
 | Díra | Dopad |
 |---|---|
-| Není serverová brána před mergem | testy si pouští agent sám |
-| Orchestrační vrstva (directors) neexistuje | agent pracuje bez stavového automatu |
+| Brána před mergem neběžela proti živému Forgeju | `agenticdev-ctl gate <projekt>` ji změří, ale dokud neuvidíš červenou kontrolu zablokovat merge, není to dokázané |
+| Repozitář bez testů projde branou nazeleno | prázdná brána není brána; workflow to hlásí jen jako varování v logu |
+| Orchestrační vrstva (directors) neexistuje | postup vynucují kontroly projektu v harnessu (ADR-0003) |
 | Join heslo nemá expiraci | odvolání = změna hesla všem |
 | Počítání tokenů `len/3` | útrata v panelu je orientační |
 | Chybí observabilita | Grafana a Loki zakomentované |
@@ -132,6 +135,20 @@ není doporučení — launcher podle něj staví `compose.override.yaml`. Fáze
 
 **Egress allowlist je allowlist.** `FilterDefaultDeny Yes` v tinyproxy je to
 podstatné. Bez něj by se z toho stal blocklist a všechno neuvedené by prošlo.
+
+**Jméno commit statusu si nevymýšlej.** Forgejo Actions statusy jmenuje
+`<workflow> / <job> (<událost>)`, tedy `test / test (pull_request)`. V
+branch protection je proto glob `test / *`, ne `test`. Dřív tam bylo
+`test` — to se nepotká s ničím, a požadovaný status, který nikdy nepřijde,
+drží merge zablokovaný **navždycky**, přičemž v panelu to vypadá jako
+funkční brána. Kdyby to nějaká verze pojmenovala jinak, `agenticdev-ctl
+gate <projekt>` vypíše skutečná jména a `--fix` je nasadí.
+
+**Workflow potřebuje i importovaný projekt.** Dřív se zakládalo jen u nově
+vytvořeného repozitáře, ale branch protection se nasazuje vždycky — takže
+v importovaném projektu se čekalo na status, který nikdo nevydá, a nešlo
+smergovat vůbec nic. Zakládá se proto v obou cestách, a až po zjištění
+majitele: se špatným majitelem v cestě zápis tiše selže.
 
 **Harness odmítne nastartovat**, když je kořen workspace zapisovatelný nebo
 chybí proxy. To je záměr — špatně nastavený sandbox má spadnout nahlas, ne

@@ -200,6 +200,10 @@ def _agent_env(p: dict) -> dict:
         "AGENTICDEV_PHASE": p["phase"],
         "AGENTICDEV_DATA_CLASS": p["data_class"],
         "AGENTICDEV_MODEL": str(p.get("model") or ""),
+        # Bez tohohle spadne `agenticdev-decision` na chybějící proměnnou a
+        # `/skill:rozhodnuti` neudělá nic — precedenty by se přestaly
+        # zapisovat a nikdo by si toho nevšiml, protože chybí tiše.
+        "AGENTICDEV_CP": str(p.get("control_plane") or ""),
         "PATH": f"/workspace/bin:{env.get('PATH', '')}",
         # Pod má uzavřený egress, takže cokoli, co Pi zkouší na startu
         # mimo allowlist, jen čeká na timeout. Vypnout to je rychlost,

@@ -185,6 +185,55 @@ CFGEOF
     restic snapshots | tail -20
     ;;
 
+  gate)
+    # Brána před mergem je jediná věc, která zastaví špatný kód od člověka,
+    # který ho neumí přečíst. Tenhle příkaz existuje proto, že se z kódu
+    # nedá vyčíst jedna podstatná věc: jak Forgejo pojmenovává commit
+    # statusy. Požadovaný status, který se nikdy neobjeví, vypadá v panelu
+    # jako fungující brána — a přitom drží merge zablokovaný navždycky.
+    CODE="${2:-}"
+    [[ -n "$CODE" ]] || die "použití: agenticdev-ctl gate <projekt> [--fix]"
+    [[ -n "${DASHBOARD_TOKEN:-}" ]] || die "DASHBOARD_TOKEN v .env chybí"
+    API="http://${VPS_HOST}:8080"
+    JAR=$(mktemp)
+    trap 'rm -f "$JAR"' EXIT
+
+    curl -fsS -c "$JAR" -X POST "$API/v1/auth/dashboard" \
+      -H 'content-type: application/json' \
+      -d "$(python3 -c 'import json,sys;print(json.dumps({"token":sys.argv[1]}))' "$DASHBOARD_TOKEN")" \
+      >/dev/null 2>&1 \
+      || die "přihlášení k API selhalo — heslo do panelu se možná měnilo v panelu a .env má staré"
+
+    if [[ "${3:-}" == "--fix" ]]; then
+      printf "${B}▸${O} Nasazuji bránu znovu podle nastavení\n"
+      curl -fsS -b "$JAR" -X POST "$API/v1/projects/$CODE/gate" \
+        | python3 -c 'import json,sys; d=json.load(sys.stdin); print("  workflow:", d["workflow"], "· ochrana:", d["protection"], "· webhook:", d["webhook"]); print("  požaduje:", ", ".join(d["required_contexts"]))' \
+        || die "nasazení selhalo"
+      echo
+    fi
+
+    OUT=$(curl -fsS -b "$JAR" "$API/v1/projects/$CODE/gate") || die "projekt '$CODE' neznám, nebo API neodpovědělo"
+    printf '%s' "$OUT" | python3 - <<'PY'
+import json, sys
+d = json.load(sys.stdin)
+G, Y, R, D, O = "\033[1;32m", "\033[1;33m", "\033[1;31m", "\033[2m", "\033[0m"
+mark = lambda b: f"{G}✓{O}" if b else f"{R}✗{O}"
+print(f"\n  Brána před mergem — {d['project']} ({d['repo']})\n")
+print(f"  {mark(d['workflow'])} workflow .forgejo/workflows/test.yml v repozitáři")
+print(f"  {mark(d['status_check'])} branch protection čeká na status")
+print(f"    {D}požaduje{O}  {', '.join(d['required_contexts']) or '—'}")
+print(f"    {D}vydáno{O}    {', '.join(d['seen_contexts']) or '— (žádné PR, nebo runner nic nespustil)'}")
+print(f"    {D}sedne na{O}  {', '.join(d['matched']) or '—'}")
+ap = d.get("required_approvals")
+print(f"  {mark(bool(ap))} lidí musí PR odkliknout: {ap if ap is not None else '?'}"
+      + ("" if ap else f"  {Y}← kód projde, aniž ho někdo přečetl{O}"))
+print(f"  {mark(d['webhook'])} webhook na control plane (bez něj se úkol nepřepne na hotovo)")
+col = G if d["ok"] else R
+print(f"\n  {col}{d['verdict']}{O}\n")
+sys.exit(0 if d["ok"] else 1)
+PY
+    ;;
+
   verify)  (cd "$SRC" && ./tools/verify-tree.sh) ;;
 
   psql)    dc exec -T postgres psql -U agenticdev -d agenticdev "${@:2}" ;;
@@ -224,6 +273,9 @@ CFGEOF
     funnel            (znovu) zapne veřejnou registraci a vypíše odkaz
 
     smoke             projede platformu end-to-end a řekne, co nesedí
+    gate <projekt>    stojí brána před mergem? porovná požadované statusy
+                      s těmi, které Forgejo doopravdy vydává
+    gate <projekt> --fix   nasadí bránu znovu podle nastavení v panelu
     backup-now        okamžitá záloha
     backup-check      seznam snapshotů
     verify            kontrola stromu repa

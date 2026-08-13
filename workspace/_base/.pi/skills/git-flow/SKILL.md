@@ -41,7 +41,22 @@ Typ: `feat` `fix` `refactor` `test` `docs` `chore` `perf` `build` `ci`
 bin/agenticdev-git finish "feat(import): karty z DE systému"
 ```
 
-Sesype wip commity do jednoho, narovná na main, odešle, otevře PR.
+Sesype wip commity do jednoho a narovná na main. Odeslat větev a otevřít PR
+už není práce podu — agent nemá k repozitáři přístup ani token do Forgeja.
+`finish` proto nechá vzkaz v `.agenticdev/finished` a zbytek udělá launcher
+na VPS, až pod skončí. Nečekej v podu na URL toho PR, tam nevznikne.
+
+## Když nejde narovnat na main
+
+`sync` i `finish` skončí hláškou „konflikt s main". To není chyba, kterou
+máš obejít. Nástroj už vrátil větev do stavu před rebasem, takže se nic
+neztratilo, a konflikt zapsal na VPS jako rozhodnutí pro člověka.
+
+Ty v tu chvíli:
+
+1. Neodevzdávej. `finish` schválně nepokračuje.
+2. Řekni člověku, které soubory kolidují — nástroj je vypsal.
+3. Nezkoušej `git rebase`, `git merge` ani `git checkout --ours` naslepo.
 
 ## Ostatní
 
@@ -55,6 +70,6 @@ bin/agenticdev-git cleanup             # smaže smergované
 ## Pravidla
 
 - Před `finish` vždy spusť testy. Když padají, neodevzdávej.
-- Konflikt při rebase neřeš naslepo — ukaž ho člověku.
+- Konflikt při rebase neřeš naslepo — viz sekci výš.
 - Nikdy `git push --force` napřímo, `finish` používá `--force-with-lease`.
 - Nikdy neměň historii větve, která už je v PR.

@@ -3,7 +3,14 @@
 set -euo pipefail
 [[ $# -ge 2 ]] || { echo "použití: agenticdev-decision \"otázka\" \"co jsme zvolili\" [\"proč\"]"; exit 1; }
 : "${AGENTICDEV_CP:?AGENTICDEV_CP není nastaveno}" "${AGENTICDEV_PROJECT:?AGENTICDEV_PROJECT není nastaveno}"
-TOK="${AGENTICDEV_TOKEN:-$(cat "$HOME/.agenticdev/token" 2>/dev/null)}"
+# Token vkládá launcher na tmpfs podu. Na $HOME se spolehnout nejde — ten
+# v podu ukazuje taky do tmpfs a `.agenticdev` v něm není.
+TOK="${AGENTICDEV_TOKEN:-}"
+for f in /run/agenticdev/token "$HOME/.agenticdev/token"; do
+  [[ -n "$TOK" ]] && break
+  [[ -r "$f" ]] && TOK=$(cat "$f")
+done
+[[ -n "$TOK" ]] || { echo "✗ nenašel jsem token stanice" >&2; exit 1; }
 curl -fsS -X POST "$AGENTICDEV_CP/v1/workspace/$AGENTICDEV_PROJECT/decision" \
   -H "Authorization: Bearer $TOK" -H 'content-type: application/json' \
   -d "$(python3 -c 'import json,sys;print(json.dumps({"question":sys.argv[1],"chosen":sys.argv[2],"rationale":sys.argv[3] if len(sys.argv)>3 else ""}))' "$@")" \

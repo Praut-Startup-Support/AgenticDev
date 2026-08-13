@@ -234,21 +234,38 @@ Komerční licence: **svanda@praut.cz**
 
 Poctivý stav. Vedeno jako blokátory verze 1.0:
 
-- **Není serverová brána před mergem.** Agent si pouští vlastní testy ve
-  vlastním podu. Pro malý důvěryhodný tým stačí, jinak ne.
+- **Brána před mergem neběžela proti živému Forgeju.** Runner, workflow,
+  branch protection i webhook, který po mergi nastaví `done`, jsou
+  nasazené, a `agenticdev-ctl gate <projekt>` změří to jediné, co se z kódu
+  vyčíst nedá: jestli se požadovaná jména commit statusů potkávají s těmi,
+  která Forgejo doopravdy vydává. Pusť to na prvním PR. Dokud neuvidíš
+  červenou kontrolu zablokovat merge, neber to jako dokázané.
+- **Repozitář bez testů projde branou nazeleno.** Workflow to napíše do logu
+  jako varování. Prázdná brána není brána.
 - **Chybí observabilita.** Grafana a Loki jsou v compose zakomentované,
   harness loguje na stdout.
 - **Join tokeny nemají expiraci** a jsou na instanci, ne na osobu.
 - **Počítání tokenů je odhad** (`len/3`) a ceny v `PRICING` nejsou ověřené.
   Útrata v nástěnce je orientační.
-- **CI není napsané.** Forgejo Actions je zapnuté, workflow chybí.
 - **Orchestrační vrstva (directors) neexistuje.** Architektonický rozbor ji
-  popisuje, v kódu není. Agent pracuje bez stavového automatu.
+  popisuje, v kódu není. Postup úkolu vynucují kontroly projektu v harnessu
+  ([ADR-0003](docs/adr/0003-postup-ukolu-vynucuje-harness.md)).
 - **Útěk z kontejneru je mimo rozsah.** Pod běží bez rootu, se zahozenými
   capabilities a bez Docker socketu — ale kontejner není hypervizor. Ber to
   jako pevný plot, ne jako trezor.
 
 Bezpečnostní dopady najdeš v [SECURITY.md](SECURITY.md).
+
+---
+
+## Na čem stojí ty tři věci, kvůli kterým se to staví
+
+Na stanici se nic nenastavuje ani nedovoluje · celá firma má jeden
+automatizovaný postup kolem gitu, i pro lidi, co git neumí · všichni mají
+stejně nastaveného agenta bez ohledu na předplatné.
+
+Co přesně každou z nich vynucuje a jakým příkazem se to na živé instanci
+ověří, je v [docs/tri-pozadavky.md](docs/tri-pozadavky.md).
 
 ---
 

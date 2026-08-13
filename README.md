@@ -252,6 +252,20 @@ agent to respect a rule.
 base and phase layers, and chains `AGENTS.md` — but those carry
 instructions, not the boundary. The boundary is the mount.
 
+The same file pins the model for everyone via `enabledModels`, so two people
+on different subscriptions run the same agent and only the bill differs. If
+someone's subscription cannot serve that model, Pi says so and stops — a
+silent substitution would be exactly the kind of degradation this design
+refuses.
+
+## What the three requirements actually rest on
+
+Nothing on a laptop to configure or approve; one git process for the whole
+company, automated for people who don't know git; the same agent for
+everyone regardless of subscription. Which piece of code enforces each of
+those, and the command that proves it on a live instance, is in
+[docs/tri-pozadavky.md](docs/tri-pozadavky.md) (Czech).
+
 ---
 
 ## Where to change things
@@ -289,11 +303,14 @@ same checksum.
 
 Honest status. These are tracked as blockers to 1.0:
 
-- **The merge gate has never run.** A Forgejo Actions runner, a seeded
-  workflow, branch protection and a webhook that sets `done` on merge are
-  all in place, but none of it has been exercised against a live Forgejo —
-  the runner image could not be pulled where this was built. Until you see
-  a red check block a merge, assume the gate is decoration.
+- **The merge gate has never run against a live Forgejo.** The runner, the
+  seeded workflow, branch protection and the webhook that sets `done` on
+  merge are all in place, and `agenticdev-ctl gate <project>` now measures
+  whether the required commit-status names match the ones Forgejo actually
+  emits — the one thing that cannot be read off the code. Run it on your
+  first PR. Until you see a red check block a merge, assume nothing.
+- **A repository with no tests passes the gate green.** The workflow says so
+  in the log as a warning. An empty gate is not a gate.
 - **No observability stack.** Grafana and Loki are commented out; the harness
   logs to stdout.
 - **Join tokens never expire** and are per-instance, not per-person.

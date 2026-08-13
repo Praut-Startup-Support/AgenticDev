@@ -264,6 +264,20 @@ print(f\"{a.get('name','')}|{a.get('email','')}\")" 2>/dev/null)
     else
       bad "bundle nenese autora — agent nebude mít čím commitovat"
     fi
+
+    # Model je součást sdíleného prostředí, ne osobního přihlášení: kdyby si
+    # každý bral to, co má ve svém předplatném, dostali by dva lidé na
+    # stejné zadání jinou odpověď a nešlo by to srovnat.
+    PINNED=$(printf '%s' "$BUNDLE" | python3 -c "
+import json,sys
+b=json.load(sys.stdin)
+s=json.loads((b.get('files') or {}).get('.pi/settings.json') or '{}')
+print(', '.join(s.get('enabledModels') or []))" 2>/dev/null)
+    if [[ -n "$PINNED" ]]; then
+      ok "bundle přišpendluje model všem stejně ($PINNED)"
+    else
+      bad "bundle nepřišpendluje model — každý pojede na tom, co má v předplatném"
+    fi
   else
     warn "žádný projekt — workspace nezkusím"
   fi
@@ -288,6 +302,24 @@ if [[ -n "${FORGEJO_HOOK_SECRET:-}" ]]; then
 else
   bad "FORGEJO_HOOK_SECRET chybí — úkol se po mergi nepřepne na hotovo"
   info "doplň ho do .env a spusť: agenticdev-ctl restart control-plane"
+fi
+
+# Tvar jmen commit statusů se z kódu vyčíst nedá — Forgejo je skládá jako
+# „workflow / job (událost)". Požadovaný status, který se nikdy neobjeví,
+# vypadá jako fungující brána a přitom drží merge zablokovaný navždycky.
+if [[ -n "${PROJ:-}" && -f "$CK" ]]; then
+  GATE=$(curl -fsS --max-time 20 -b "$CK" "$API/v1/projects/$PROJ/gate" 2>/dev/null || true)
+  if [[ -n "$GATE" ]]; then
+    V=$(printf '%s' "$GATE" | python3 -c "import json,sys;d=json.load(sys.stdin);print(('ok' if d['ok'] else 'ne')+'|'+d['verdict'])" 2>/dev/null)
+    case "$V" in
+      ok\|*)  ok "brána projektu $PROJ: ${V#*|}" ;;
+      ne\|*)  warn "brána projektu $PROJ: ${V#*|}"
+              info "podrobně: agenticdev-ctl gate $PROJ" ;;
+      *)      warn "diagnostiku brány se nepodařilo přečíst" ;;
+    esac
+  else
+    warn "diagnostika brány neodpověděla (Forgejo token? projekt bez repozitáře?)"
+  fi
 fi
 
 # ═══ 8b. Pody se pouští na VPS ═════════════════════════════════

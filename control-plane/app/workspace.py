@@ -2,13 +2,25 @@
 Workspace API — servíruje konfiguraci Pi na stanice.
 
 Tohle je ta modrá vrstva z náčrtu: „serving directors".
-VPS neposílá běžícího agenta. Posílá NASTAVENÍ Pi
-pro daný projekt a fázi — subagenty, hooky, oprávnění,
-slash příkazy, CLAUDE.md, MCP servery.
+VPS neposílá běžícího agenta. Posílá NASTAVENÍ Pi pro daný projekt a fázi.
+
+Co se doopravdy servíruje (a nic víc — dřív tu stál seznam, který
+obsahoval subagenty, hooky a MCP servery, jenže ty v žádné vrstvě nejsou):
+
+    AGENTS.md            instrukce, řetězí se přes vrstvy
+    .pi/settings.json    nastavení Pi, slévá se přes vrstvy
+    .pi/skills/          skills
+    .pi/prompts/         slash příkazy
+    bin/                 agenticdev-git, agenticdev-decision
+    .agenticdev/         fáze, scope, projekt, úkoly ve stavu ready
+
+Oprávnění agenta tady nejsou úmyslně: co smí zapsat, drží mount v podu
+(scope se remountuje rw, zbytek je ro), a kam smí ven, drží egress proxy.
+Kdyby to bylo v nastavení, byla by to prosba, ne hranice.
 
 Vrstvení (pozdější přepisuje dřívější):
     workspace/_base/            společné pro všechny
-    workspace/_phase/<fáze>/    oprávnění a scope podle fáze
+    workspace/_phase/<fáze>/    scope a instrukce podle fáze
     workspace/<projekt>/        specifika projektu
 """
 from __future__ import annotations
@@ -167,10 +179,20 @@ def bundle(code: str, phase: str | None = None, ws: dict = Depends(current_ws)):
     if settings_layers:
         files[".pi/settings.json"] = _merge_settings(settings_layers)
 
-    # restricted projekt = jen lokální modely, vynuceno v settings
-    if proj["data_class"] == "restricted":
+    # ── model se přišpendlí všem, ne jen u restricted ──
+    # Přihlášení k modelu je na člověka (ADR-0007), a kdyby si každý bral
+    # to, co má ve svém předplatném, dostali by dva lidé na stejné zadání
+    # jinou odpověď a nešlo by to srovnat. Sdílené je tedy i JMÉNO modelu;
+    # osobní zůstává jen to, kdo ho platí.
+    #
+    # Když ho něčí předplatné neumí, Pi to řekne a nepustí ho dál. To je
+    # záměr: tichá záměna modelu za jiný je přesně ten druh degradace,
+    # kterou zakazuje P5.
+    allow = proj["model_allowlist"] or (
+        ["ollama/*"] if proj["data_class"] == "restricted" else [])
+    if allow:
         cur = json.loads(files.get(".pi/settings.json", "{}"))
-        cur["enabledModels"] = proj["model_allowlist"] or ["ollama/*"]
+        cur["enabledModels"] = allow
         files[".pi/settings.json"] = json.dumps(cur, indent=2, ensure_ascii=False)
 
     # ── stav z ledgeru do pracovního adresáře ──

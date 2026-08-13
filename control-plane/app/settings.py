@@ -46,6 +46,15 @@ EDITABLE: dict[str, tuple[str, str, str, bool, str]] = {
     "EGRESS_ALLOWLIST": ("sit", "Povolené domény", "textarea", False,
                          "Čárkou oddělené. Pod se jinam nedostane."),
 
+    # ─── brána před mergem ────────────────────────────────────
+    "MERGE_GATE_CONTEXTS":  ("brana", "Požadované statusy", "text", False,
+                             "Čárkou oddělené vzory glob. Forgejo statusy jmenuje "
+                             "„workflow / job (událost)\", proto výchozí „test / *\". "
+                             "Skutečný tvar ukáže: agenticdev-ctl gate <projekt>."),
+    "MERGE_GATE_APPROVALS": ("brana", "Kolik lidí musí PR odkliknout", "number", False,
+                             "Nula = kód se smerguje, aniž ho někdo přečetl. "
+                             "Když autoři nejsou programátoři, dej aspoň 1."),
+
     # ─── přístup ──────────────────────────────────────────────
     "DASHBOARD_TOKEN":  ("pristup", "Heslo do panelu", "password", True,
                          "Změna odhlásí ostatní relace až po vypršení."),
@@ -79,6 +88,7 @@ READONLY = [
 GROUPS = {
     "modely":    "Modely",
     "sit":       "Síť",
+    "brana":     "Brána před mergem",
     "pristup":   "Přístup",
     "tailscale": "Tailscale",
     "posta":     "Pošta",

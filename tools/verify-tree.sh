@@ -25,9 +25,12 @@ chk workspace/_base/.pi/prompts/hotovo.md   "/hotovo"
 chk workspace/_base/bin/agenticdev-git           "git automatizace"
 chk workspace/_base/bin/agenticdev-decision      "zápis rozhodnutí"
 # Každá fáze z enumu phase_kind musí mít scope — projekt přepnutý do fáze
-# bez něj by launcher nesestavil a bundle by vracel 400.
+# bez něj by launcher nesestavil a bundle by vracel 400. AGENTS.md hlídáme
+# taky: fáze bez instrukcí se nepozná jinak než tím, že se agent chová
+# jako v předchozí fázi.
 for p in discovery design implementation hardening delivery support; do
-  chk "workspace/_phase/$p/scope" "fáze $p"; done
+  chk "workspace/_phase/$p/scope"     "fáze $p — scope"
+  chk "workspace/_phase/$p/AGENTS.md" "fáze $p — instrukce"; done
 
 echo "── značka ──"
 for f in brand/logo.svg brand/mark.svg brand/icon.svg brand/agenticdev.ico; do chk "$f" "$f"; done
@@ -35,6 +38,8 @@ for f in brand/logo.svg brand/mark.svg brand/icon.svg brand/agenticdev.ico; do c
 echo "── dokumenty ──"
 chk HANDOFF.md              "handoff"
 chk DEPLOY.md               "postup nasazení"
+# Odkazuje na něj README v obou jazycích.
+chk docs/tri-pozadavky.md   "tři požadavky a co je vynucuje"
 chk tools/rename-to-agenticdev.sh "přejmenování produktu"
 
 echo "── nasazení ──"

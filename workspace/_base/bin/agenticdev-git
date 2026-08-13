@@ -185,17 +185,51 @@ cmd_save() {
 #  sync — narovnání na main
 # ═══════════════════════════════════════════════════════════════
 cmd_sync() {
+  local manual=0
+  [[ "${1:-}" == "--manual" ]] && manual=1
+
   git fetch --quiet origin || die "fetch selhal"
   local behind; behind=$(git rev-list --count "HEAD..origin/$MAIN_BRANCH" 2>/dev/null || echo 0)
   [[ "$behind" -eq 0 ]] && { ok "jsi aktuální"; return 0; }
 
   info "$behind commitů pozadu, rebasuju"
   if ! git rebase --quiet "origin/$MAIN_BRANCH"; then
-    warn "konflikt při rebase"
-    git --no-pager diff --name-only --diff-filter=U | sed 's/^/    /'
+    local files; files=$(git --no-pager diff --name-only --diff-filter=U | sort -u)
+
+    if [[ "$manual" -eq 1 ]]; then
+      warn "konflikt při rebase — nechávám ho rozdělaný, jak jsi chtěl"
+      printf '%s\n' "$files" | sed 's/^/    /'
+      echo
+      echo "  Vyřeš, pak: git rebase --continue"
+      echo "  Nebo zruš:  git rebase --abort"
+      return 1
+    fi
+
+    # Výchozí chování je pro člověka, který git neumí. Rozdělaný rebase je
+    # pro něj slepá ulička: nezná --continue, nezná --abort, a co udělá
+    # naslepo, o práci připraví. Vrátíme ho tedy tam, kde byl — commity na
+    # větvi zůstávají — a konflikt předáme dál jako rozhodnutí pro člověka.
+    # Kdo git umí, dostane tu původní cestu přes `sync --manual`.
+    git rebase --abort 2>/dev/null || true
+    warn "konflikt s $MAIN_BRANCH — tvoje práce zůstala, jak byla"
     echo
-    echo "  Vyřeš, pak: git rebase --continue"
-    echo "  Nebo zruš:  git rebase --abort"
+    echo "  Někdo změnil stejná místa dřív než ty:"
+    printf '%s\n' "$files" | sed 's/^/    /'
+    echo
+    echo "  Nic se neztratilo. Commity máš na větvi $(git branch --show-current)."
+    echo "  Tohle už není práce pro agenta — musí to srovnat člověk."
+
+    if command -v agenticdev-decision >/dev/null 2>&1 && [[ -n "${AGENTICDEV_CP:-}" ]]; then
+      if agenticdev-decision \
+           "Konflikt s $MAIN_BRANCH na větvi $(git branch --show-current)" \
+           "čeká na člověka" \
+           "Kolidující soubory: $(printf '%s' "$files" | tr '\n' ' ')" >/dev/null 2>&1; then
+        ok "zapsáno na VPS — objeví se to v panelu"
+      else
+        info "na VPS se to zapsat nepovedlo, řekni to člověku sám"
+      fi
+    fi
+    printf "\n  ${D}Kdo umí git: agenticdev-git sync --manual${O}\n" >&2
     return 1
   fi
   ok "narovnáno na $MAIN_BRANCH"
@@ -228,7 +262,9 @@ cmd_finish() {
       -m "{\"session\":\"$SESSION\",\"kind\":\"squashed\",\"checkpoints\":$wips,\"ts\":\"$(date -u +%FT%TZ)\"}" HEAD
   fi
 
-  cmd_sync || die "Vyřeš konflikty a spusť finish znovu."
+  # Konflikt neobcházíme: větev, která se nedá narovnat, se neodesílá.
+  # `sync` už člověka informoval a konflikt zapsal, tady jen nepokračujeme.
+  cmd_sync || die "Neodevzdávám — nejdřív se musí vyřešit ten konflikt."
 
   # Odsud dál to není práce podu. Síťový git a zakládání PR dělá hostitel:
   # agent nemá přístup k repozitáři ani token do Forgeja, a to je záměr —
@@ -325,7 +361,7 @@ case "${1:-help}" in
   start)      shift; cmd_start "$@" ;;
   checkpoint|cp) shift; cmd_checkpoint "$@" ;;
   save)       shift; cmd_save "$@" ;;
-  sync)       cmd_sync ;;
+  sync)       shift; cmd_sync "$@" ;;
   finish)     shift; cmd_finish "$@" ;;
   park)       cmd_park ;;
   list|ls)    cmd_list ;;
@@ -339,8 +375,11 @@ agenticdev-git — git automatizace
   checkpoint [zpráva]  průběžný bod návratu (wip commit)
   save <typ> <scope> "zpráva"
                        pořádný commit (feat|fix|refactor|test|docs|chore)
-  sync                 rebase na aktuální main
-  finish ["titulek"]   sesype wip, narovná, pushne, otevře PR
+  sync [--manual]      rebase na aktuální main
+                       konflikt: vrátí stav a předá člověku
+                       --manual = nechá rozdělaný rebase (pro znalce gitu)
+  finish ["titulek"]   sesype wip, narovná; odeslat a PR otevřít
+                       už je práce launcheru na VPS
   park                 odloží rozdělanou práci
   list                 rozdělané úkoly
   switch <část>        cesta k worktree
