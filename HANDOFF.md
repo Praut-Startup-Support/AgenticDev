@@ -157,6 +157,28 @@ tiše nechránit nic.
 (pod, harness, egress-proxy, directors, `.claude/settings.json`). Než něco
 napíšeš do README, ověř `grep`em, že to existuje.
 
+**`BIND_ADDR` je ta nejostřejší hrana celého nasazení.** Na téhle adrese
+poslouchá Postgres, Forgejo a MinIO. `0.0.0.0` nebo veřejná adresa znamená
+ledger na internetu. Default je `${VPS_HOST}`, aby starší `.env` fungoval
+bez úpravy; v režimu `domain` to instalátor nastaví na `127.0.0.1` a
+nedovozuje to odnikud — natvrdo, protože chyba v odvození by tady byla
+nejdražší v celém projektu. `smoke` to kontroluje z konfigurace **i** ze
+skutečných soketů (`ss -tln`).
+
+**Bez Tailscale nikdo neautentizuje SSH za tebe.** `tailscale up --ssh`
+je to, co dnes lidem dovoluje přihlásit se bez jakéhokoli klíče. V režimu
+`domain` to padá na obyčejné SSH, takže veřejný klíč každého člověka musí
+někdo zapsat do `authorized_keys`: `agenticdev-ctl keys add <login> "<klíč>"`,
+nebo automaticky z registrace přes `keys sync`. **Control plane to nedělá a
+dělat nemá** — běží v kontejneru, do `/home` nedosáhne, a kdyby dosáhl, měl
+by cestu k rootu. Kdo to bude chtít „zjednodušit" tak, že to zapíše control
+plane, ruší tím jednu z hranic, na kterých platforma stojí.
+
+**Režim se zapéká i do klientského instalátoru.** `__CONNECT__` dosazuje
+`enroll.py` (`_fill`) u Linuxu a Windows, a `mk-mac-installer.sh` u Macu.
+Kdyby se to někde vynechalo, instalátor by na doménové instanci sháněl
+tailnet, který neexistuje, a skončil by na tom.
+
 **Panel je jeden HTML soubor s jedním `<script>`.** Jedna syntaktická chyba
 v něm neshodí jednu obrazovku, ale celý skript — tedy i přihlášení. Přesně
 tak tam ležel `const esc` vedle `function esc()`: v jednom scope je to

@@ -181,7 +181,13 @@ else
   info "Doménu nech prázdnou, jestli VPS nemá veřejné DNS."
   info "Platforma pak pojede jen po tailnetu."
   ask DOMAIN "Doména platformy (Enter = jen tailnet)" ""
-  ask ADMIN_EMAIL "Tvůj e-mail (admin)" ""
+  # Kdo instaluje, se musí podepsat. Není to formalita: z tohohle jména
+  # vzniká `principal`, a bez něj má auditní stopa u všeho, co se odklikne
+  # v panelu, prázdného aktéra — tedy nevíš, kdo co schválil.
+  ask ADMIN_NAME "Tvoje jméno a příjmení (správce instance)" ""
+  [[ -n "$ADMIN_NAME" ]] || die "jméno je povinné — bez něj nebude v auditní stopě vidět, kdo instanci spravuje"
+  [[ "$ADMIN_NAME" == *" "* ]] || warn "jen jedno slovo? V auditní stopě to bude takhle."
+  ask ADMIN_EMAIL "Tvůj e-mail (správce instance)" ""
   [[ -n "$ADMIN_EMAIL" ]] || die "e-mail je povinný — Forgejo bez něj admina nezaloží"
   ask ADMIN_USER "Přihlašovací jméno do gitu" "admin"
 
@@ -243,43 +249,107 @@ docker compose version >/dev/null 2>&1 || die "docker compose plugin chybí"
 ok "$(docker --version | cut -d, -f1)"
 
 # ═══════════════════════════════════════════════════════════════════════
-#  3. Tailscale — bez tailnetu se platforma nedá bezpečně vystavit
+#  3. Jak se k platformě dostanou lidi
+#
+#  Dvě cesty, a je to volba mezi bezpečností a nezávislostí:
+#
+#    tailscale  Vnitřní služby vidí jen tailnet, z internetu je vidět
+#               přesně jedna cesta — registrační stránka přes Funnel.
+#               Autentizaci SSH dělá tailnet, klíče nikdo neřeší.
+#               Cena: každá instance potřebuje Tailscale účet a dvě
+#               naklikané věci v cizí administraci (HTTPS certifikáty,
+#               Funnel v policy).
+#
+#    domain     Žádná třetí strana. Caddy s Let's Encrypt na vlastní
+#               doméně, vnitřní služby jen na 127.0.0.1, přihlášení
+#               obyčejným SSH klíčem. Cena: z internetu je vidět i panel
+#               a git, chráněné heslem.
+#
+#  Kdo tuhle platformu rozdává dál (jiná firma, jiný ajťák, jiný VPS),
+#  chce `domain` — jinak musí každý zákazník zřídit Tailscale účet.
 # ═══════════════════════════════════════════════════════════════════════
-step "Tailscale"
-command -v tailscale >/dev/null || \
-  run "instalace               " bash -c 'curl -fsSL https://tailscale.com/install.sh | sh'
-
-TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
-if [[ -z "$TS_IP" ]]; then
-  warn "VPS ještě není v tailnetu."
-  TS_KEY="${TS_AUTHKEY:-}"
-  if (( ! MODE_YES )); then
-    echo
-    info "Vlož auth key z https://login.tailscale.com/admin/settings/keys"
-    info "nebo nech prázdné a přihlaš se interaktivně (vypíše se odkaz)."
-    asks TS_KEY "Tailscale auth key (Enter = interaktivně)"
-  fi
-  if [[ -n "$TS_KEY" ]]; then
-    tailscale up --ssh --authkey "$TS_KEY" >>"$LOG" 2>&1 || true
+step "Připojení"
+CONNECT="${AGENTICDEV_CONNECT:-}"
+if [[ -z "$CONNECT" ]]; then
+  if (( MODE_YES )); then
+    # Bez odpovědi se řídíme tím, co je k dispozici: doména = domain.
+    CONNECT=$([[ -n "${DOMAIN:-}" ]] && echo domain || echo tailscale)
   else
-    echo; printf "${DIM}    otevři odkaz, který se objeví, a potvrď stroj${OFF}\n"
-    tailscale up --ssh || true
+    echo
+    info "  1) Tailscale  — nic z toho není z internetu vidět, kromě registrace."
+    info "                  Potřebuje Tailscale účet pro tuhle instanci."
+    info "  2) Doména     — bez třetí strany, TLS z Let's Encrypt."
+    info "                  Z internetu je vidět i panel, chráněný heslem."
+    [[ -n "${DOMAIN:-}" ]] || info "  ${DIM}Doménu jsi nezadal, takže 2) nejde vybrat.${OFF}"
+    ask CONNECT_N "Volba" "$([[ -n "${DOMAIN:-}" ]] && echo 2 || echo 1)"
+    CONNECT=$([[ "$CONNECT_N" == "2" ]] && echo domain || echo tailscale)
   fi
-  TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
 fi
-[[ -n "$TS_IP" ]] || die "Tailscale se nepřipojil. Spusť 'tailscale up --ssh' a pusť instalátor znovu."
-ok "tailnet IP: $TS_IP"
+if [[ "$CONNECT" == "domain" && -z "${DOMAIN:-}" ]]; then
+  die "Režim domain potřebuje doménu. Pusť instalátor znovu a zadej ji, nebo vyber Tailscale."
+fi
+ok "režim: $CONNECT"
+
+TS_IP=""
+if [[ "$CONNECT" == "tailscale" ]]; then
+  command -v tailscale >/dev/null || \
+    run "instalace Tailscale     " bash -c 'curl -fsSL https://tailscale.com/install.sh | sh'
+
+  TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+  if [[ -z "$TS_IP" ]]; then
+    warn "VPS ještě není v tailnetu."
+    TS_KEY="${TS_AUTHKEY:-}"
+    if (( ! MODE_YES )); then
+      echo
+      info "Vlož auth key z https://login.tailscale.com/admin/settings/keys"
+      info "nebo nech prázdné a přihlaš se interaktivně (vypíše se odkaz)."
+      asks TS_KEY "Tailscale auth key (Enter = interaktivně)"
+    fi
+    if [[ -n "$TS_KEY" ]]; then
+      tailscale up --ssh --authkey "$TS_KEY" >>"$LOG" 2>&1 || true
+    else
+      echo; printf "${DIM}    otevři odkaz, který se objeví, a potvrď stroj${OFF}\n"
+      tailscale up --ssh || true
+    fi
+    TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+  fi
+  [[ -n "$TS_IP" ]] || die "Tailscale se nepřipojil. Spusť 'tailscale up --ssh' a pusť instalátor znovu."
+  ok "tailnet IP: $TS_IP"
+else
+  # Bez Tailscale se vnitřní služby publikují na loopback a z venku k nim
+  # nevede nic než Caddy. Kdyby tu byla veřejná adresa, byl by na internetu
+  # i Postgres — proto to není odvozené, ale nastavené natvrdo.
+  TS_IP=127.0.0.1
+  ok "vnitřní služby jen na 127.0.0.1, zvenčí přes Caddy"
+  # Mount socketu tailscaled je v compose bezpodmínečně. Bez Tailscale ta
+  # cesta neexistuje a Docker by ji vyrobil jako adresář vlastněný rootem;
+  # uděláme to sami, ať je to vidět a ne náhoda.
+  mkdir -p /var/run/tailscale
+fi
 
 AGENTICDEV_MODE=tailnet
 if [[ -n "${DOMAIN:-}" ]]; then
   AGENTICDEV_MODE=public
   PUB_IP=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
   DNS_IP=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1; exit}')
+  # V režimu domain je doména jediná cesta k platformě, takže špatný A
+  # záznam není varování — je to instalace, ze které nikdo nic neotevře.
+  # V režimu tailscale je doména jen navíc a tailnet funguje i bez ní.
   if [[ -n "$PUB_IP" && -n "$DNS_IP" && "$PUB_IP" != "$DNS_IP" ]]; then
+    if [[ "$CONNECT" == "domain" ]]; then
+      die "$DOMAIN míří na $DNS_IP, ale tenhle stroj má $PUB_IP.
+     Bez správného A záznamu se nevydá certifikát a k platformě se nikdo
+     nedostane — v tomhle režimu jiná cesta není. Sprav DNS a pusť to znovu."
+    fi
     warn "$DOMAIN míří na $DNS_IP, ale tenhle stroj má $PUB_IP"
     info "TLS certifikát se nevydá, dokud A záznam nesedí. Pokračuji dál —"
-    info "Mac instalátor umí zatím jezdit po tailnetu."
+    info "po tailnetu to funguje i tak."
   elif [[ -z "$DNS_IP" ]]; then
+    if [[ "$CONNECT" == "domain" ]]; then
+      die "$DOMAIN se nepřeložil. V tomhle režimu je to jediná cesta k
+     platformě, takže bez A záznamu nemá instalace smysl. Sprav DNS a
+     pusť to znovu."
+    fi
     warn "$DOMAIN se nepřeložil — zkontroluj A záznam"
   else
     ok "DNS $DOMAIN → $DNS_IP"
@@ -383,7 +453,20 @@ AGENTICDEV_MODE=$AGENTICDEV_MODE
 AGENTICDEV_DOMAIN=$DOMAIN
 CONTROL_PLANE_URL=$CP_URL
 VPS_HOST=$TS_IP
+# tailscale = vnitřní služby na tailnetu, přihlášení dělá tailnet
+# domain    = vnitřní služby na 127.0.0.1, přihlášení obyčejným SSH klíčem
+AGENTICDEV_CONNECT=$CONNECT
+# Na téhle adrese se publikují Postgres, Forgejo a MinIO. NIKDY 0.0.0.0 —
+# veřejná adresa tady znamená databázi na internetu.
+BIND_ADDR=$TS_IP
 TZ=Europe/Prague
+
+# ─── admin ───────────────────────────────────────────────────
+# Kdo tuhle instanci spravuje. Zakládá se z toho `principal`, aby u
+# rozhodnutí odklikaného v panelu bylo v auditní stopě vidět kdo — dřív
+# tam byl actor prázdný.
+ADMIN_NAME=$ADMIN_NAME
+ADMIN_EMAIL=$ADMIN_EMAIL
 
 # ─── tajemství ───────────────────────────────────────────────
 POSTGRES_PASSWORD=$PG_PW
@@ -669,7 +752,17 @@ chmod +x /usr/local/bin/agenticdev-mac-installer
 # tailnetu. Funnel jede na 8443, ať se nepere s Caddy na 443.
 step "Veřejná registrace"
 JOIN_URL=""
-if tailscale funnel --bg --https=8443 "http://${VPS_HOST}:8080/join" >>"$LOG" 2>&1; then
+if [[ "$CONNECT" == "domain" ]]; then
+  # Bez Tailscale není co tunelovat: registrace jde přes Caddy na doméně,
+  # stejnou cestou jako panel. Funnel by tu neměl ani co spustit.
+  JOIN_URL="https://${DOMAIN}/join"
+  ok "registrace na doméně: $JOIN_URL"
+  if grep -q '^JOIN_URL=' $ENVF; then
+    sed -i "s|^JOIN_URL=.*|JOIN_URL=$JOIN_URL|" $ENVF
+  else
+    echo "JOIN_URL=$JOIN_URL" >>$ENVF
+  fi
+elif tailscale funnel --bg --https=8443 "http://${VPS_HOST}:8080/join" >>"$LOG" 2>&1; then
   TS_NAME=$(tailscale status --json 2>/dev/null \
             | grep -oE '"DNSName"[[:space:]]*:[[:space:]]*"[^"]+"' \
             | head -1 | sed 's/.*"\([^"]*\)"$/\1/' | sed 's/\.$//')
@@ -717,18 +810,26 @@ fi
 #  HOTOVO
 # ═══════════════════════════════════════════════════════════════════════
 CP="${CONTROL_PLANE_URL:-http://$VPS_HOST:8080}"
+if [[ "$CONNECT" == "domain" ]]; then
+  PANEL_URL="https://$DOMAIN/"
+  PANEL_NOTE="funguje z jakéhokoli prohlížeče — chrání ho jen tvoje heslo"
+else
+  PANEL_URL="$CP"
+  PANEL_NOTE="jen z tailnetu; nejdřív si připoj stroj odkazem pro tým"
+fi
 cat <<EOF
 
   ${GRN}╔═══════════════════════════════════════════════════════╗
   ║   HOTOVO. Platforma běží.                             ║
   ╚═══════════════════════════════════════════════════════╝${OFF}
 
-  ${BLU}1) ADMIN PANEL${OFF} — jen pro tebe, jen z tailnetu
-     $CP
+  ${BLU}1) ADMIN PANEL${OFF} — $PANEL_NOTE
+     ${YLW}$PANEL_URL${OFF}
+     správce: $ADMIN_NAME <$ADMIN_EMAIL>
      heslo: ${YLW}to, které jsi zadal jako ADMIN${OFF}
 
   ${BLU}2) ODKAZ PRO TÝM${OFF} — pošli komukoliv, kdekoliv na světě
-     ${YLW}${JOIN_URL:-（Funnel se nezapnul, viz výše）}${OFF}
+     ${YLW}${JOIN_URL:-（nezapnulo se, viz výše）}${OFF}
 
      Zadá heslo, které jsi zadal jako JOIN, a stránka ho provede
      zbytkem. Funguje pro macOS, Linux i Windows.

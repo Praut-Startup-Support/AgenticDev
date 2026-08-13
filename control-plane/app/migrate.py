@@ -80,6 +80,29 @@ STEPS: list[tuple[str, str]] = [
         END $$
         """,
     ),
+    (
+        "workstation.ssh_public_key — klíč, kterým se člověk přihlásí na VPS",
+        # V režimu domain (bez Tailscale) dělá autentizaci obyčejné SSH, ne
+        # tailnet. Veřejný klíč z registrace se proto musí uschovat, aby ho
+        # `agenticdev-ctl keys sync` mohl zapsat do authorized_keys toho
+        # člověka. Control plane to sám nedělá a nemá — je v kontejneru a
+        # do /home nedosáhne, což je záměr.
+        """
+        ALTER TABLE workstation ADD COLUMN IF NOT EXISTS ssh_public_key TEXT
+        """,
+    ),
+    (
+        "workstation.key_installed_at — kdy se klíč dostal do authorized_keys",
+        """
+        ALTER TABLE workstation ADD COLUMN IF NOT EXISTS key_installed_at TIMESTAMPTZ
+        """,
+    ),
+    (
+        "workstation.login — pod jakým účtem na VPS ten člověk pracuje",
+        """
+        ALTER TABLE workstation ADD COLUMN IF NOT EXISTS login TEXT
+        """,
+    ),
 ]
 
 

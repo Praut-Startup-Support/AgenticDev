@@ -1,6 +1,12 @@
 # ═══════════════════════════════════════════════════════════════
 #  AgenticDev — VPS stack (F0 + F2)
-#  Publikuje se JEN na tailnet. Nikdy na 0.0.0.0.
+#
+#  Vnitřní služby se publikují na BIND_ADDR. NIKDY na 0.0.0.0:
+#    režim tailnet   BIND_ADDR = tailnet IP    → vidí to jen tailnet
+#    režim domain    BIND_ADDR = 127.0.0.1     → z venku jen přes Caddy
+#  Default je VPS_HOST, aby starší .env fungoval bez úpravy.
+#
+#  Kdo tu dosadí veřejnou adresu, vystaví Postgres a MinIO na internet.
 #  Nasazení: docker compose --env-file /srv/agenticdev/config/.env up -d
 # ═══════════════════════════════════════════════════════════════
 name: agenticdev
@@ -28,6 +34,9 @@ services:
       - /srv/agenticdev/data/caddy:/data
       # Bez tohohle socketu neumí Caddy vyzvednout TLS certifikát pro
       # .ts.net doménu a spadne zpátky na Let's Encrypt → NXDOMAIN.
+      # V režimu domain (bez Tailscale) socket neexistuje; instalátor ten
+      # adresář založí prázdný, mount je pak neškodný a Caddyfile v tom
+      # režimu certifikát bere z ACME.
       - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock
     environment:
       AGENTICDEV_DOMAIN: ${AGENTICDEV_DOMAIN}
@@ -42,9 +51,10 @@ services:
   postgres:
     <<: [*restart, *logging]
     image: pgvector/pgvector:${POSTGRES_TAG:-pg16}
-    # POZOR: bind jen na tailnet IP, ne 0.0.0.0
+    # POZOR: bind jen na BIND_ADDR, nikdy 0.0.0.0. Tady je databáze —
+    # jedna špatná adresa a je na internetu.
     ports:
-      - "${VPS_HOST}:5432:5432"
+      - "${BIND_ADDR:-${VPS_HOST}}:5432:5432"
     environment:
       POSTGRES_USER: agenticdev
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?chybi POSTGRES_PASSWORD}
@@ -90,8 +100,8 @@ services:
       FORGEJO__actions__ENABLED: "true"
       TZ: ${TZ:-Europe/Prague}
     ports:
-      - "${VPS_HOST}:2222:22"
-      - "${VPS_HOST}:3000:3000"    # web jen na tailnetu (záloha, když neběží Caddy)
+      - "${BIND_ADDR:-${VPS_HOST}}:2222:22"
+      - "${BIND_ADDR:-${VPS_HOST}}:3000:3000"    # web jen na tailnetu (záloha, když neběží Caddy)
     volumes:
       - /srv/agenticdev/data/forgejo:/data
     depends_on:
@@ -134,8 +144,8 @@ services:
       MINIO_ROOT_USER: agenticdev
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?chybi MINIO_ROOT_PASSWORD}
     ports:
-      - "${VPS_HOST}:9000:9000"
-      - "${VPS_HOST}:9001:9001"
+      - "${BIND_ADDR:-${VPS_HOST}}:9000:9000"
+      - "${BIND_ADDR:-${VPS_HOST}}:9001:9001"
     volumes:
       - /srv/agenticdev/data/minio:/data
     healthcheck:
@@ -174,6 +184,12 @@ services:
       HARNESS_IMAGE: ${HARNESS_IMAGE:-agenticdev/harness:dev}
       AGENTICDEV_DOMAIN: ${AGENTICDEV_DOMAIN:-}
       AGENTICDEV_INSTANCE_ID: ${AGENTICDEV_INSTANCE_ID:-}
+      # tailscale | domain — určuje, co se lidem posílá za způsob přihlášení
+      AGENTICDEV_CONNECT: ${AGENTICDEV_CONNECT:-tailscale}
+      # Správce instance jako `principal`, ať má auditní stopa u panelových
+      # zápisů koho uvést. Bez toho je actor prázdný.
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       WO_VERIFY_KEY_B64: ${WO_VERIFY_KEY_B64:-}
       CONTROL_PLANE_URL: ${CONTROL_PLANE_URL:-}
       LEASE_HOURS: ${LEASE_HOURS:-4}
@@ -185,7 +201,7 @@ services:
       AGENTICDEV_OUT: /out
       TZ: ${TZ:-Europe/Prague}
     ports:
-      - "${VPS_HOST}:8080:8080"
+      - "${BIND_ADDR:-${VPS_HOST}}:8080:8080"
     volumes:
       - /srv/agenticdev/data/directors:/directors
       - /srv/agenticdev/src:/repo:ro

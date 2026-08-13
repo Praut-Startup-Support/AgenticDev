@@ -1,10 +1,12 @@
 # AgenticDev
 
-**Vlastní agentní vývojová platforma.** Server drží všechna data, kontext a
-orchestraci. Na stroji vývojáře běží agent v izolovaném kontejneru — bez
-cesty do internetu, ven jen přes proxy s allowlistem. Repozitář je připojený
-read-only a zapisovatelné jsou jen cesty povolené pro danou fázi, takže
-zápis jinam selže na úrovni jádra.
+**Vlastní agentní vývojová platforma.** Server drží všechna data, kontext,
+orchestraci — a i samotné agenty. Agent běží v izolovaném kontejneru **na
+VPS**, ne na stroji vývojáře ([ADR-0005](docs/adr/0005-pod-bezi-na-vps.md)):
+bez cesty do internetu, ven jen přes proxy s allowlistem. Repozitář je
+připojený read-only a zapisovatelné jsou jen cesty povolené pro danou fázi,
+takže zápis jinam selže na úrovni jádra. U lidí na strojích nepřistane nic
+těžkého — ikona, a Tailscale jen když sis vybral ten režim.
 
 Instrukce, scope i fázi dodává server. Rozhodnutí, běhy a náklady se
 zapisují zpátky do auditovatelné evidence.
@@ -22,11 +24,38 @@ zapisují zpátky do auditovatelné evidence.
 | | |
 |---|---|
 | Server | Debian 12 nebo Ubuntu 22.04/24.04, aspoň 4 GB RAM, root |
-| Síť | **Tailscale** — tvrdý požadavek, ne volba |
+| Síť | **Buď** Tailscale (z internetu je vidět jen registrace), **nebo** veřejná doména s A záznamem (bez třetí strany, Caddy + Let's Encrypt). Vybírá se při instalaci |
 | Klienti | macOS, Linux nebo Windows 10 build 19041+ (přes WSL2) |
 | Volitelně | API klíč k modelu, nebo lokální Ollama |
 
-**Než začneš**, dvě věci v Tailscale konzoli:
+## Dvě cesty, jak se k platformě dostat
+
+Instalátor se zeptá, kterou chceš. Je to jediné architektonické rozhodnutí,
+které u instance uděláš, a je to volba mezi bezpečností a nezávislostí.
+
+| | **Tailscale** | **Doména** |
+|---|---|---|
+| Z internetu vidět | registrační stránka, nic jiného | i panel, git a API — za heslem správce |
+| Vnitřní služby (Postgres, Forgejo, MinIO) | jen na tailnetu | jen na `127.0.0.1`, zvenčí přes Caddy |
+| TLS | vydá Tailscale pro `.ts.net` jméno | Let's Encrypt pro tvou doménu |
+| Přihlášení vývojáře | autentizuje tailnet, klíč nikdo neřeší | obyčejný SSH klíč, zapíše `agenticdev-ctl keys add` |
+| Potřebuje třetí stranu | ano — Tailscale účet na každou instanci | ne |
+| Potřebuje doménu s A záznamem | ne | ano |
+
+**Tailscale** ber, když si instanci provozuješ sám a chceš nejmenší možnou
+plochu: z internetu je vidět přesně jedna cesta.
+
+**Doménu** ber, když instance dáváš jiným firmám. S Tailscale by si každá
+musela zřídit Tailscale účet a naklikat dvě věci v konzoli, kterou
+neovládáš (*Enable HTTPS*, *Add Funnel to policy*). Nad pár instalacemi to
+přestane jít.
+
+V obou případech rozhoduje `BIND_ADDR` v `/srv/agenticdev/config/.env` o
+tom, kde poslouchá Postgres a MinIO. **Nikdy tam nesmí být veřejná adresa
+ani `0.0.0.0`** — to by znamenalo ledger na internetu. `agenticdev-ctl
+smoke` to kontroluje, a kontroluje i skutečné sokety, ne jen konfiguraci.
+
+**Když vybereš Tailscale**, nastav předtím dvě věci v jeho konzoli:
 
 1. [DNS](https://login.tailscale.com/admin/dns) → *HTTPS Certificates* →
    **Enable HTTPS**. Bez toho server nedostane certifikát pro svoje
@@ -42,8 +71,19 @@ Instalátor obojí zkontroluje a řekne ti, co chybí.
 
 ### 1. Server — jednou
 
-Stáhni soubor, ověř součet, spusť. Nepouštěj ho přes rouru — instalátor to
-schválně odmítá.
+**Jeden příkaz.** Bootstrap stáhne vydaný instalátor, ověří jeho součet
+**i podpis cosign**, a teprve pak ho spustí:
+
+```bash
+ssh root@tvuj-server 'bash <(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'
+```
+
+Zeptá se na sedm věcí — doména, tvoje jméno a e-mail jako správce instance,
+dvě hesla, dodavatel modelů a jak se budou lidi připojovat — a zbytek udělá
+sám. Na konci vypíše dva odkazy.
+
+Kdo nechce pouštět nic z roury, stáhne si bootstrap, přečte ho a pustí. Nebo
+si vezme vydaný artefakt sám:
 
 ```bash
 curl -fLO https://github.com/Praut-Startup-Support/AgenticDev/releases/latest/download/agenticdev-install-vps.sh
@@ -54,18 +94,25 @@ scp agenticdev-install-vps.sh root@tvuj-server:/root/
 ssh root@tvuj-server 'bash /root/agenticdev-install-vps.sh'
 ```
 
-Zeptá se na pět věcí včetně dvou hesel, zbytek udělá sám. Na konci vypíše
-dva odkazy:
+Ten artefakt sám přes rouru pustit nejde a odmítá to schválně — musí si
+rozbalit vlastní payload ze souboru na disku.
+
+Na konci vypíše dva odkazy:
 
 | Odkaz | Pro koho | Odkud funguje |
 |---|---|---|
-| **Admin panel** | jen ty | jen z tailnetu |
-| **Registrační stránka** | tvůj tým | z celého internetu |
+| **Admin panel** | jen ty | režim Tailscale: jen z tailnetu. Režim doména: z každého prohlížeče, za heslem správce |
+| **Registrační stránka** | tvůj tým | z celého internetu, v obou režimech |
+
+Vypíše k tomu i správce instance — jméno a e-mail, které jsi zadal při
+instalaci, se založí jako `principal`, aby v auditní stopě bylo vidět, kdo
+rozhodnutí odklikl. Dřív tam byl aktér prázdný.
 
 ### 2. Klienti — neomezeně strojů, kdekoliv
 
-Pošli registrační odkaz komukoliv. Zadá heslo, vybere si systém a dostane
-dva příkazy ke zkopírování.
+Pošli registrační odkaz komukoliv. Zadá jméno, příjmení, e-mail a heslo,
+vybere si systém a dostane příkazy ke zkopírování — v režimu Tailscale dva
+(připojit se do sítě, nainstalovat), v režimu doména jeden.
 
 **macOS · Linux · Windows.** Windows jede přes WSL2.
 
@@ -75,12 +122,27 @@ otevře agenta a výběr projektu.
 
 Objeví se v panelu v záložce *tým*, kde jde každý stroj zvlášť odpojit.
 
-**Co je reálně na internetu:** jediná cesta — registrační stránka —
-vystavená přes [Tailscale Funnel](https://tailscale.com/kb/1223/funnel).
-Nepotřebuje veřejnou IP ani doménu. Heslo je na ní jediná zábrana, takže má
-limit pokusů na IP i globálně a po pěti neúspěších zamkne adresu na hodinu.
+**V režimu doména je jeden krok navíc**, protože autentizaci už nedělá
+tailnet: instalátor na stroji vygeneruje SSH klíč a vypíše jeho veřejnou
+část. Ten řádek ti člověk pošle a ty ho zapíšeš:
 
-Všechno ostatní — panel, git, API — zůstává na tailnetu.
+```bash
+sudo agenticdev-ctl keys add msvanda "ssh-ed25519 AAAA… msvanda@mac"
+```
+
+`agenticdev-ctl user add` klíč z registrace zapíše sám, `agenticdev-ctl keys
+sync` dobere pozdější. Control plane do `authorized_keys` nezapisuje a
+nemá — běží v kontejneru a do `/home` mu nic nepatří.
+
+**Co je reálně na internetu:** v režimu Tailscale jediná cesta —
+registrační stránka vystavená přes
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel), bez veřejné IP i
+domény. V režimu doména je to Caddy na 443: registrace, panel a git. Heslo
+je na registraci jediná zábrana, takže má limit pokusů na IP i globálně a po
+pěti neúspěších zamkne adresu na hodinu; panel má stejné omezení.
+
+Vnitřní služby — Postgres, Forgejo, MinIO — nejsou na internetu v žádném
+režimu. Drží to `BIND_ADDR` a kontroluje `agenticdev-ctl smoke`.
 
 ### 3. Admin panel
 

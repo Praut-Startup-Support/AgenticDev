@@ -20,6 +20,104 @@ PROFILE=(--profile gate)
 [[ "${AGENTICDEV_MODE:-tailnet}" == "public" ]] && PROFILE+=(--profile public)
 dc() { (cd "$SRC/vps" && docker compose "${PROFILE[@]}" --env-file "$ENVF" "$@"); }
 
+API="http://${VPS_HOST:-127.0.0.1}:8080"
+
+# Přihlásí se k API heslem z .env a nechá cookie v $JAR. Volající si $JAR
+# musí uklidit sám (trap), ať tajemství neleží v /tmp dýl, než je potřeba.
+api_login() {
+  [[ -n "${DASHBOARD_TOKEN:-}" ]] || die "DASHBOARD_TOKEN v .env chybí"
+  JAR=$(mktemp)
+  curl -fsS -c "$JAR" -X POST "$API/v1/auth/dashboard" \
+    -H 'content-type: application/json' \
+    -d "$(python3 -c 'import json,sys;print(json.dumps({"token":sys.argv[1]}))' "$DASHBOARD_TOKEN")" \
+    >/dev/null 2>&1 \
+    || die "přihlášení k API selhalo — heslo do panelu se možná měnilo v panelu a .env má staré"
+}
+
+# Zapíše veřejné klíče z registrací do authorized_keys. Bez Tailscale je
+# tohle jediná cesta, jak se člověk na VPS dostane — s Tailscale to jen
+# nikomu neublíží.
+#
+# Dělá to root tady, ne control plane: ten běží v kontejneru, do /home
+# nedosáhne, a kdyby dosáhl, měl by cestu k rootu.
+# Zapíše jeden klíč, který ti člověk poslal. Existuje proto, že klientský
+# instalátor nemá čím se u control plane ověřit — heslo z registrace si
+# nedrží a JOIN_TOKEN mít nesmí. Cesta „pošli mi svůj veřejný klíč" je o
+# jeden krok delší, ale nepotřebuje pro to otevřít žádný nový endpoint.
+keys_add() {
+  [[ $EUID -eq 0 ]] || die "tohle musí root: sudo agenticdev-ctl keys add $*"
+  local login="${1:-}"; shift || true
+  local key="$*"
+  [[ -n "$login" && -n "$key" ]] || die "použití: agenticdev-ctl keys add <login> \"ssh-ed25519 AAAA... jmeno@stroj\""
+  [[ "$key" == ssh-* || "$key" == ecdsa-* ]] \
+    || die "tohle nevypadá jako veřejný klíč (má začínat ssh-ed25519, ssh-rsa…)"
+  id "$login" >/dev/null 2>&1 || die "účet $login neexistuje — nejdřív: agenticdev-ctl user add $login"
+
+  local home ak
+  home=$(getent passwd "$login" | cut -d: -f6)
+  [[ -n "$home" && -d "$home" ]] || die "$login nemá domovský adresář"
+  ak="$home/.ssh/authorized_keys"
+  install -d -m 0700 -o "$login" -g "$login" "$home/.ssh"
+  touch "$ak"; chown "$login:$login" "$ak"; chmod 600 "$ak"
+  if grep -qxF "$key" "$ak" 2>/dev/null; then
+    printf "${D}  klíč už tam je${O}\n"
+  else
+    printf '%s\n' "$key" >>"$ak"
+    printf "${G}  ✓${O} klíč zapsán pro %s\n" "$login"
+  fi
+  printf "  ${D}Zkouška z jeho stroje:  ssh %s@%s${O}\n" \
+    "$login" "${AGENTICDEV_DOMAIN:-$(hostname -f 2>/dev/null || hostname)}"
+}
+
+keys_sync() {
+  [[ $EUID -eq 0 ]] || die "tohle musí root: sudo agenticdev-ctl keys sync"
+  api_login
+  trap 'rm -f "$JAR"' EXIT
+
+  local pending
+  pending=$(curl -fsS -b "$JAR" "$API/v1/ssh-keys/pending") \
+    || die "seznam klíčů se nepodařilo načíst"
+
+  local n=0 skipped=0
+  while IFS=$'\t' read -r id login host key; do
+    [[ -n "$id" ]] || continue
+    if ! id "$login" >/dev/null 2>&1; then
+      printf "${Y}  !${O} %s ještě nemá účet — nejdřív: agenticdev-ctl user add %s\n" "$login" "$login"
+      skipped=$((skipped+1)); continue
+    fi
+    local home ak
+    home=$(getent passwd "$login" | cut -d: -f6)
+    [[ -n "$home" && -d "$home" ]] || { printf "${Y}  !${O} %s nemá domovský adresář\n" "$login"; skipped=$((skipped+1)); continue; }
+    ak="$home/.ssh/authorized_keys"
+    install -d -m 0700 -o "$login" -g "$login" "$home/.ssh"
+    touch "$ak"; chown "$login:$login" "$ak"; chmod 600 "$ak"
+    # -x -F: celý řádek, doslova. Bez toho by se klíč přidával pokaždé.
+    if grep -qxF "$key" "$ak" 2>/dev/null; then
+      printf "${D}    %s@%s už tam je${O}\n" "$login" "$host"
+    else
+      printf '%s\n' "$key" >>"$ak"
+      printf "${G}  ✓${O} %s@%s\n" "$login" "$host"
+    fi
+    curl -fsS -b "$JAR" -X POST "$API/v1/ssh-keys/$id/installed" \
+      -H 'content-type: application/json' -d '{"ok":true}' >/dev/null 2>&1 \
+      || printf "${Y}  !${O} klíč zapsaný, ale potvrzení do ledgeru selhalo\n"
+    n=$((n+1))
+  done < <(printf '%s' "$pending" | python3 -c "
+import json, sys
+for w in json.load(sys.stdin):
+    k = (w.get('ssh_public_key') or '').strip().replace('\t', ' ')
+    if not k:
+        continue
+    print('\t'.join([str(w['id']), w['login'], w['hostname'], k]))
+")
+
+  if (( n == 0 && skipped == 0 )); then
+    printf "${D}  nic nového — všechny klíče už na místě jsou${O}\n"
+  else
+    printf "\n  zapsáno %s, přeskočeno %s\n" "$n" "$skipped"
+  fi
+}
+
 case "${1:-status}" in
 
   status)
@@ -102,8 +200,8 @@ CFGEOF
           -H 'content-type: application/json' \
           -d "$(jq -nc --arg t "$JOIN_TOKEN" --arg h "$LOGIN@$(hostname -s 2>/dev/null || hostname)" \
                 --arg f "$FP" --arg n "$FULL" --arg e "$MAIL" \
-                --arg k "$(cat "$SSHK.pub")" \
-                '{join_token:$t,hostname:$h,device_key_fp:$f,display_name:$n,email:$e,ssh_public_key:$k}')" \
+                --arg k "$(cat "$SSHK.pub")" --arg l "$LOGIN" \
+                '{join_token:$t,hostname:$h,device_key_fp:$f,display_name:$n,email:$e,ssh_public_key:$k,login:$l}')" \
           2>/dev/null) || die "registrace u control plane selhala"
         jq -e .workstation_id >/dev/null <<<"$RESP" || die "server odmítl: $RESP"
         printf "${G}  ✓${O} zaregistrováno jako %s <%s>\n" "$FULL" "$MAIL"
@@ -111,8 +209,20 @@ CFGEOF
           && printf "${G}  ✓${O} SSH klíč ve Forgeju\n" \
           || printf "${Y}  !${O} SSH klíč se do Forgeja nedostal (chybí FORGEJO_TOKEN?)\n"
 
+        # Klíče z registrací stanic do authorized_keys. Bez Tailscale je to
+        # jediná cesta, jak se ten člověk na VPS dostane; s Tailscale to jen
+        # nikomu neublíží. Selhání nesmí shodit zakládání účtu — účet je
+        # hotový a klíče se dají dosynchronizovat.
+        keys_sync || printf "${Y}  !${O} klíče se nepodařilo zapsat, zkus: agenticdev-ctl keys sync\n"
+
         printf "\n  Pošli tomu člověku:\n"
-        printf "    ${Y}tailscale ssh %s@%s${O}\n" "$LOGIN" "$(hostname -s 2>/dev/null || hostname)"
+        # Bez Tailscale se přihlašuje obyčejným SSH na doménu; s ním přes
+        # tailnet, kde autentizaci dělá síť a klíč nikdo neřeší.
+        if [[ "${AGENTICDEV_CONNECT:-tailscale}" == "domain" ]]; then
+          printf "    ${Y}ssh %s@%s${O}\n" "$LOGIN" "${AGENTICDEV_DOMAIN:-<doména>}"
+        else
+          printf "    ${Y}tailscale ssh %s@%s${O}\n" "$LOGIN" "$(hostname -s 2>/dev/null || hostname)"
+        fi
         printf "    ${Y}agenticdev${O}\n"
         printf "  ${D}Poprvé se v Pi přihlásí k modelu přes /login. Platí to pak dál.${O}\n"
         printf "\n  ${Y}Pozor:${O} členství ve skupině docker je na tomhle stroji\n"
@@ -185,6 +295,14 @@ CFGEOF
     restic snapshots | tail -20
     ;;
 
+  keys)
+    case "${2:-sync}" in
+      sync) keys_sync ;;
+      add)  shift 2; keys_add "$@" ;;
+      *)    die "použití: agenticdev-ctl keys sync | keys add <login> \"<veřejný klíč>\"" ;;
+    esac
+    ;;
+
   gate)
     # Brána před mergem je jediná věc, která zastaví špatný kód od člověka,
     # který ho neumí přečíst. Tenhle příkaz existuje proto, že se z kódu
@@ -193,16 +311,8 @@ CFGEOF
     # jako fungující brána — a přitom drží merge zablokovaný navždycky.
     CODE="${2:-}"
     [[ -n "$CODE" ]] || die "použití: agenticdev-ctl gate <projekt> [--fix]"
-    [[ -n "${DASHBOARD_TOKEN:-}" ]] || die "DASHBOARD_TOKEN v .env chybí"
-    API="http://${VPS_HOST}:8080"
-    JAR=$(mktemp)
+    api_login
     trap 'rm -f "$JAR"' EXIT
-
-    curl -fsS -c "$JAR" -X POST "$API/v1/auth/dashboard" \
-      -H 'content-type: application/json' \
-      -d "$(python3 -c 'import json,sys;print(json.dumps({"token":sys.argv[1]}))' "$DASHBOARD_TOKEN")" \
-      >/dev/null 2>&1 \
-      || die "přihlášení k API selhalo — heslo do panelu se možná měnilo v panelu a .env má staré"
 
     if [[ "${3:-}" == "--fix" ]]; then
       printf "${B}▸${O} Nasazuji bránu znovu podle nastavení\n"
@@ -267,6 +377,10 @@ PY
                       založí člověku účet na VPS, klíče a registraci
     user list         kdo má na VPS účet
     user pending      kdo se ohlásil a čeká na založení
+    keys sync         zapíše klíče z registrací do authorized_keys
+                      (bez Tailscale je to jediná cesta k přihlášení)
+    keys add <login> "<veřejný klíč>"
+                      zapíše klíč, který ti člověk poslal
 
     mac               vygeneruje instalátor Macu (svázaný s tímhle VPS)
     info              přihlašovací údaje a odkazy

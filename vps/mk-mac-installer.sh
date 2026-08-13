@@ -74,6 +74,10 @@ AGENTICDEV_IDENTITY="$IDENT"
 AGENTICDEV_GIT_HOST="$VPS_HOST"
 AGENTICDEV_GIT_PORT="2222"
 AGENTICDEV_GENERATED="$STAMP"
+# Režim připojení se zapéká sem: instalátor patří k jedné instanci, a ta
+# je buď na tailnetu, nebo na doméně. Bez toho by na Macu sháněl tailnet,
+# který u domain instalace neexistuje.
+AGENTICDEV_CONNECT_MODE="${AGENTICDEV_CONNECT:-tailscale}"
 AGENTICDEV_BODY_B64="$(base64 -w0 <"$BODY")"
 EOF
 
@@ -149,6 +153,7 @@ trap 'rm -f "$BODY"' EXIT
 base64 --decode <<<"$AGENTICDEV_BODY_B64" >"$BODY"
 export AGENTICDEV_CP="$CP"
 export AGENTICDEV_INSTANCE_ID="$AGENTICDEV_INSTANCE"
+export AGENTICDEV_CONNECT="$AGENTICDEV_CONNECT_MODE"
 bash "$BODY"
 OUTER
 

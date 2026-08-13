@@ -110,12 +110,16 @@
       <button data-os="win">Windows</button>
     </div>
 
-    <h2>1 — Připoj se do sítě</h2>
-    <p id="net-hint">Nainstaluj Tailscale a přihlas se tímhle klíčem.</p>
-    <pre id="cmd1">—</pre>
-    <button class="copy" data-for="cmd1">Zkopírovat</button>
+    <!-- V režimu domain se do žádné sítě nepřipojuje — celý tenhle krok
+         se skryje, jinak by lidi hledali klíč, který neexistuje. -->
+    <div id="step-net">
+      <h2>1 — Připoj se do sítě</h2>
+      <p id="net-hint">Nainstaluj Tailscale a přihlas se tímhle klíčem.</p>
+      <pre id="cmd1">—</pre>
+      <button class="copy" data-for="cmd1">Zkopírovat</button>
+    </div>
 
-    <h2 style="margin-top:24px">2 — Nainstaluj AgenticDev</h2>
+    <h2 id="inst-h" style="margin-top:24px">2 — Nainstaluj AgenticDev</h2>
     <p>Stáhne instalátor a spustí ho. Ověří si, že mluví se správným serverem.</p>
     <pre id="cmd2">—</pre>
     <button class="copy" data-for="cmd2">Zkopírovat</button>
@@ -165,6 +169,11 @@ function cmds() {
 
 function render() {
   const [a, b] = cmds();
+  // Bez Tailscale je instalace jediný krok. Nechat tu prázdný krok „připoj
+  // se do sítě" by znamenalo, že člověk hledá klíč, který nikdy nedostane.
+  const domainMode = DATA && DATA.connect === 'domain';
+  $('#step-net').style.display = domainMode ? 'none' : '';
+  $('#inst-h').textContent = (domainMode ? '1' : '2') + ' — Nainstaluj AgenticDev';
   $('#cmd1').textContent = a;
   $('#cmd2').textContent = b;
   $('#net-hint').textContent = DATA && DATA.tailscale_authkey

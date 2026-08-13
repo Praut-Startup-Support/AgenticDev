@@ -383,6 +383,39 @@ else
   warn "bez přihlášení do panelu tyhle kontroly nezkusím"
 fi
 
+# ═══ 8d. Vnitřní služby nesmí být na internetu ═════════════════
+hdr "Kam se publikují vnitřní služby"
+# Tohle je ta nejostřejší hrana celého nasazení: jedna špatná adresa v
+# BIND_ADDR a na internetu je Postgres s celým ledgerem.
+case "${BIND_ADDR:-${VPS_HOST:-}}" in
+  0.0.0.0|"*"|"")
+    bad "BIND_ADDR je '${BIND_ADDR:-${VPS_HOST:-prázdné}}' — Postgres a MinIO jsou na všech adresách"
+    info "nastav v $ENVF: BIND_ADDR=127.0.0.1 (režim domain) nebo tailnet IP" ;;
+  127.0.0.1|localhost)
+    ok "vnitřní služby jen na loopbacku" ;;
+  100.*|10.*|172.1[6-9].*|172.2*.*|172.3[01].*|192.168.*)
+    ok "vnitřní služby na privátní adrese ${BIND_ADDR:-$VPS_HOST}" ;;
+  *)
+    bad "BIND_ADDR=${BIND_ADDR:-$VPS_HOST} nevypadá jako privátní adresa"
+    info "když je veřejná, je Postgres z internetu dostupný — sprav to hned" ;;
+esac
+
+# Ověříme to i skutečností, ne jen konfigurací.
+for p in 5432 9000; do
+  hit=$(ss -tlnH 2>/dev/null | awk -v P=":$p" '$4 ~ P {print $4}' | grep -E '^(0\.0\.0\.0|\*|\[::\])' || true)
+  [[ -z "$hit" ]] && ok "port $p neposlouchá na všech adresách" \
+    || bad "port $p poslouchá na $hit — to je z internetu"
+done
+
+# Správce jako principal: bez něj je u panelových zápisů prázdný aktér.
+if [[ -n "${ADMIN_NAME:-}" ]]; then
+  n=$(psqlq "SELECT count(*) FROM principal WHERE kind='human' AND display_name='${ADMIN_NAME//\'/\'\'}'")
+  [[ "$n" == "1" ]] && ok "správce '$ADMIN_NAME' je v ledgeru jako principal" \
+    || warn "správce '$ADMIN_NAME' v principal není — vznikne při prvním přihlášení do panelu"
+else
+  bad "ADMIN_NAME v .env chybí — u rozhodnutí v panelu nebude vidět, kdo je odklikl"
+fi
+
 # ═══ 8b. Pody se pouští na VPS ═════════════════════════════════
 hdr "Launcher na VPS"
 command -v agenticdev >/dev/null \

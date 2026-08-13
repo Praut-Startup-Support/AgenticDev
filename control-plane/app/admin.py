@@ -54,8 +54,20 @@ def dashboard_login(body: Login, request: Request, response: Response):
         raise HTTPException(401, "špatné heslo")
 
     _login_limiter.clear(ip)
+
+    # Identita admina do relace, ať má auditní stopa u panelových zápisů
+    # koho uvést. Selhání nesmí zablokovat přihlášení — bez identity se
+    # zapíše None, jako se to dělo vždycky.
+    pid = None
+    try:
+        with db() as c:
+            pid = admin_principal(c)
+    except Exception:                                   # noqa: BLE001
+        pass
+
     tok = jwt.encode(
-        {"role": "operator", "exp": now() + timedelta(days=30)},
+        {"role": "operator", "principal_id": pid,
+         "exp": now() + timedelta(days=30)},
         JWT_SECRET, algorithm="HS256")
     # Secure podle toho, jak PŘIŠEL TENHLE požadavek, ne podle nastavení
     # instance: k panelu se chodí přes doménu (https) i napřímo po
@@ -77,6 +89,41 @@ def operator(agenticdev_session: str | None = Cookie(default=None)) -> dict:
         raise HTTPException(401, "relace vypršela")
 
 
+def who(op: dict) -> str | None:
+    """
+    Kdo tenhle zápis udělal. Dřív se do auditní stopy dávalo `None`, takže
+    u rozhodnutí odklikaného v panelu nebylo vidět, kdo ho odklikl —
+    „operátor" nebyl nikdo. Admin je teď `principal` a jeho id nese relace.
+
+    Vrací None jen u instancí, které vznikly před tou změnou a admina
+    zaregistrovaného nemají; pak je to poctivější než si někoho vymyslet.
+    """
+    return op.get("principal_id")
+
+
+def admin_principal(c) -> str | None:
+    """
+    Najde (nebo založí) `principal` admina podle ADMIN_NAME z prostředí.
+
+    Zakládá se to při přihlášení, ne při startu: kdyby na tom visel start
+    kontejneru, jedna chyba v databázi by shodila celou platformu kvůli
+    jednomu řádku.
+    """
+    name = (os.environ.get("ADMIN_NAME") or "").strip()
+    if not name:
+        return None
+    mail = (os.environ.get("ADMIN_EMAIL") or "").strip() or None
+    row = c.execute(
+        "SELECT id FROM principal WHERE kind = 'human' AND display_name = %s",
+        (name,)).fetchone()
+    if row:
+        return str(row["id"])
+    row = c.execute(
+        """INSERT INTO principal (kind, display_name, email)
+           VALUES ('human', %s, %s) RETURNING id""", (name, mail)).fetchone()
+    return str(row["id"])
+
+
 # ═══════════════════════════════════════════════════════════════
 #  Registrace pracovní stanice (nahrazuje ruční SQL)
 # ═══════════════════════════════════════════════════════════════
@@ -87,6 +134,10 @@ class Register(BaseModel):
     display_name: str
     email: str | None = None
     ssh_public_key: str | None = None      # bez něj nefunguje git clone
+    # V režimu domain (bez Tailscale) je tenhle klíč i tím, čím se člověk
+    # přihlásí na VPS — tailnet za něj autentizaci nedělá. Uschová se a
+    # `agenticdev-ctl keys sync` ho zapíše do authorized_keys.
+    login: str | None = None
 
 
 @router.post("/v1/workstations/register")
@@ -114,21 +165,34 @@ def register_ws(b: Register):
                 409,
                 f"stroj se jménem '{b.hostname}' už je registrovaný na někoho jiného. "
                 f"Přejmenuj si ho a pusť instalaci znovu.")
+        # Nový klíč nikdy nepřepisujeme prázdnou hodnotou: opakovaná
+        # registrace bez klíče by jinak člověku vzala přihlášení na VPS.
         if prev:
             ws = c.execute(
                 """UPDATE workstation
-                      SET device_key_fp = %s, revoked_at = NULL
+                      SET device_key_fp = %s, revoked_at = NULL,
+                          ssh_public_key = COALESCE(%s, ssh_public_key),
+                          login = COALESCE(%s, login),
+                          key_installed_at = CASE
+                            WHEN %s IS NOT NULL AND %s <> COALESCE(ssh_public_key, '')
+                            THEN NULL ELSE key_installed_at END
                     WHERE id = %s
                   RETURNING *""",
-                (b.device_key_fp, prev["id"])).fetchone()
+                (b.device_key_fp, b.ssh_public_key, b.login,
+                 b.ssh_public_key, b.ssh_public_key, prev["id"])).fetchone()
         else:
             ws = c.execute(
-                """INSERT INTO workstation (principal_id, hostname, device_key_fp, channel)
-                   VALUES (%s, %s, %s, 'stable')
+                """INSERT INTO workstation (principal_id, hostname, device_key_fp,
+                                            channel, ssh_public_key, login)
+                   VALUES (%s, %s, %s, 'stable', %s, %s)
                    ON CONFLICT (device_key_fp) DO UPDATE
-                     SET hostname = EXCLUDED.hostname, revoked_at = NULL
+                     SET hostname = EXCLUDED.hostname, revoked_at = NULL,
+                         ssh_public_key = COALESCE(EXCLUDED.ssh_public_key,
+                                                   workstation.ssh_public_key),
+                         login = COALESCE(EXCLUDED.login, workstation.login)
                    RETURNING *""",
-                (p["id"], b.hostname, b.device_key_fp)).fetchone()
+                (p["id"], b.hostname, b.device_key_fp,
+                 b.ssh_public_key, b.login)).fetchone()
         _emit(c, p["id"], "workstation", str(ws["id"]), "registered",
               {"hostname": b.hostname}, b.device_key_fp)
 
@@ -138,6 +202,50 @@ def register_ws(b: Register):
             "git_ready": git_ok,
             "git_ssh": GIT_SSH,
             "dashboard": os.environ.get("AGENTICDEV_DOMAIN", "")}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  SSH klíče pro přihlášení na VPS (režim domain, bez Tailscale)
+# ═══════════════════════════════════════════════════════════════
+# S Tailscale dělá autentizaci tailnet a klíče nikdo neřeší. Bez něj se
+# člověk přihlašuje obyčejným SSH, takže se jeho veřejný klíč musí dostat
+# do `~/.ssh/authorized_keys` na VPS.
+#
+# Control plane to NEDĚLÁ a dělat nemá: běží v kontejneru, do /home
+# nedosáhne, a kdyby dosáhl, měl by cestu k rootu. Zapisuje to `root`
+# příkazem `agenticdev-ctl keys sync`, který si sem přijde pro seznam.
+@router.get("/v1/ssh-keys/pending")
+def ssh_keys_pending(op: dict = Depends(operator)):
+    """Klíče, které ještě nejsou v authorized_keys."""
+    with db() as c:
+        return c.execute(
+            """SELECT w.id, w.login, w.hostname, w.ssh_public_key,
+                      p.display_name
+               FROM workstation w JOIN principal p ON p.id = w.principal_id
+               WHERE w.ssh_public_key IS NOT NULL
+                 AND w.login IS NOT NULL
+                 AND w.key_installed_at IS NULL
+                 AND w.revoked_at IS NULL
+               ORDER BY w.hostname""").fetchall()
+
+
+class KeyDone(BaseModel):
+    ok: bool = True
+
+
+@router.post("/v1/ssh-keys/{ws_id}/installed")
+def ssh_key_installed(ws_id: str, b: KeyDone, op: dict = Depends(operator)):
+    """Potvrzení od `agenticdev-ctl keys sync`, že klíč je na místě."""
+    with db() as c:
+        row = c.execute(
+            """UPDATE workstation SET key_installed_at = now()
+                WHERE id = %s RETURNING id, login, hostname""", (ws_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "stanice neexistuje")
+        _emit(c, who(op), "workstation", ws_id, "ssh_key_installed",
+              {"login": row["login"], "hostname": row["hostname"]},
+              f"sshkey:{ws_id}")
+    return {"ok": True, "login": row["login"]}
 
 
 def _forgejo_add_key(display_name: str, email: str | None,
@@ -417,7 +525,7 @@ def create_project(p: NewProject, op: dict = Depends(operator)):
                 """INSERT INTO phase (project_id, kind, order_idx, active)
                    VALUES (%s,%s,%s,%s)""",
                 (proj["id"], kind, i, kind == "implementation"))
-        _emit(c, None, "project", str(proj["id"]), "created", {"code": code}, code)
+        _emit(c, who(op), "project", str(proj["id"]), "created", {"code": code}, code)
 
     notes = [f"Vyplň prd/{code}/50-glossary.md, pak založ první úkol."]
     if not flow:
@@ -571,7 +679,7 @@ def gate_apply(code: str, op: dict = Depends(operator)):
     hook = _forgejo_add_hook(owner, name)
 
     with db() as c:
-        _emit(c, None, "project", str(proj["id"]), "gate_applied",
+        _emit(c, who(op), "project", str(proj["id"]), "gate_applied",
               {"workflow": flow, "protection": gate, "webhook": hook,
                "contexts": _gate_contexts()}, f"gate:{code}:{'-'.join(_gate_contexts())}")
 
@@ -645,7 +753,7 @@ def create_task(t: NewTask, op: dict = Depends(operator)):
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'ready',%s) RETURNING *""",
             (ph["id"], t.kind, t.title, t.spec_ref, json.dumps(t.dod),
              t.write_scope, t.risk, t.budget_czk, t.priority)).fetchone()
-        _emit(c, None, "task", str(row["id"]), "created", {"title": t.title}, str(row["id"]))
+        _emit(c, who(op), "task", str(row["id"]), "created", {"title": t.title}, str(row["id"]))
     return {"task": row}
 
 
@@ -735,7 +843,7 @@ def resolve(did: str, b: Resolve, op: dict = Depends(operator)):
             raise HTTPException(409, "rozhodnutí už bylo vyřešeno")
         c.execute("UPDATE task SET state = %s WHERE id = %s",
                   ("ready" if b.approve else "backlog", d["task_id"]))
-        _emit(c, None, "decision", did, "resolved",
+        _emit(c, who(op), "decision", did, "resolved",
               {"chosen": b.chosen, "approved": b.approve}, did)
     return {"ok": True, "task_state": "ready" if b.approve else "backlog"}
 
@@ -776,7 +884,7 @@ def team(op: dict = Depends(operator)):
 def revoke_ws(ws_id: str, op: dict = Depends(operator)):
     with db() as c:
         c.execute("UPDATE workstation SET revoked_at = now() WHERE id = %s", (ws_id,))
-        _emit(c, None, "workstation", ws_id, "revoked", {}, f"revoke:{ws_id}")
+        _emit(c, who(op), "workstation", ws_id, "revoked", {}, f"revoke:{ws_id}")
     return {"ok": True}
 
 
@@ -875,7 +983,7 @@ def settings_set(body: SettingsPatch, op: dict = Depends(operator)):
     # jinak by unikátní index spolkl druhou úpravu téhož klíče.
     if changed:
         with db() as c:
-            _emit(c, None, "platform", "settings", "updated",
+            _emit(c, who(op), "platform", "settings", "updated",
                   {"keys": sorted(changed)},
                   f"settings:{now().isoformat()}")
 

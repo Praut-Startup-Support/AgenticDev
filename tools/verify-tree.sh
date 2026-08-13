@@ -43,6 +43,7 @@ chk docs/tri-pozadavky.md   "tři požadavky a co je vynucuje"
 chk tools/rename-to-agenticdev.sh "přejmenování produktu"
 
 echo "── nasazení ──"
+chk install.sh              "bootstrap (jeden příkaz)"
 chk tools/preflight-vps.sh  "preflight"
 chk tools/smoke-vps.sh      "smoke test"
 

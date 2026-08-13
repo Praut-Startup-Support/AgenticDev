@@ -2,10 +2,10 @@
 
 **Self-hosted agentic development platform.** One VPS holds all data,
 context, orchestration — and the agents themselves. Developers connect to
-it over Tailscale SSH and work in a disposable container, with
-instructions, scope, and phase supplied by the server, and decisions,
-runs, and costs written back to an auditable ledger. Nothing but Tailscale
-is installed on their machines.
+it over SSH and work in a disposable container, with instructions, scope,
+and phase supplied by the server, and decisions, runs, and costs written
+back to an auditable ledger. Nothing heavy is installed on their machines —
+a desktop icon, and Tailscale only if you chose that mode.
 
 🇨🇿 [Česká verze tohoto dokumentu](README.cs.md)
 
@@ -39,7 +39,10 @@ hope for the best. AgenticDev inverts that:
   because the agent chose to behave.
 
 One company = one VPS. There is no central service. We never learn that you
-installed it.
+installed it. If you hand instances to other organizations, each one is
+wholly theirs — their VPS, their admin, their data, and no account of yours
+anywhere in it. Pick the domain mode for that; see
+[Two ways to connect](#two-ways-to-connect).
 
 ---
 
@@ -48,11 +51,38 @@ installed it.
 | | |
 |---|---|
 | Server | Debian 12 or Ubuntu 22.04/24.04, root access. **Sized by team:** ~2.5 GB RAM for the stack plus ~1.5 GB per person working *at the same time* — the agents run here, so about 8 GB for three people |
-| Network | **Tailscale** — hard requirement, not optional |
+| Network | **Either** Tailscale (nothing but the enrollment page is reachable from the internet) **or** a public domain with an A record (no third party; Caddy + Let's Encrypt). Pick at install time — see [Two ways to connect](#two-ways-to-connect) |
 | Clients | macOS, Linux, or Windows. Tailscale and a desktop icon; no Docker, no WSL2 |
 | Models | Each person signs in with their own subscription or API key, once, from the server |
 
-**Before you install**, two things in your Tailscale admin console:
+## Two ways to connect
+
+The installer asks which one you want. This is the one architectural choice
+you make per instance, and it is a trade between security and independence.
+
+| | **Tailscale** | **Domain** |
+|---|---|---|
+| Reachable from the internet | the enrollment page, nothing else | the panel, git and the API too — behind the admin password |
+| Internal services (Postgres, Forgejo, MinIO) | on the tailnet only | on `127.0.0.1` only, reached through Caddy |
+| TLS | issued by Tailscale for the `.ts.net` name | Let's Encrypt for your domain |
+| Developer SSH login | the tailnet authenticates; nobody handles a key | ordinary SSH key, installed with `agenticdev-ctl keys add` |
+| Needs a third party | yes — a Tailscale account per instance | no |
+| Needs a domain with an A record | no | yes |
+
+**Choose Tailscale** when you run the instance yourself and want the
+smallest possible surface: exactly one path is exposed.
+
+**Choose Domain** when you hand instances to other organizations. With
+Tailscale, every one of them has to create a Tailscale account and click two
+settings in a console you do not control (*Enable HTTPS*, *Add Funnel to
+policy*). That does not scale past a couple of installs.
+
+Whichever you pick, `BIND_ADDR` in `/srv/agenticdev/config/.env` decides
+where Postgres and MinIO listen. **It must never be a public address or
+`0.0.0.0`** — that puts the ledger on the internet. `agenticdev-ctl smoke`
+checks it, and checks the actual listening sockets too.
+
+**If you choose Tailscale**, set two things in the admin console first:
 
 1. [DNS](https://login.tailscale.com/admin/dns) → *HTTPS Certificates* →
    **Enable HTTPS**. Without it the server cannot get a certificate for its
@@ -80,8 +110,21 @@ scp tools/preflight-vps.sh root@your-vps:/root/
 ssh root@your-vps 'bash /root/preflight-vps.sh'
 ```
 
-Download the release artifact and its checksum, verify, then run it. Do not
-pipe it into bash; the installer refuses to run that way on purpose.
+Then install. The bootstrap downloads the release artifact, verifies its
+checksum **and its cosign signature**, and only then runs it:
+
+```bash
+ssh root@your-vps 'bash <(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'
+```
+
+The installer asks seven questions — domain, your name and email as the
+instance's administrator, two passwords, model provider, and how people will
+connect — and does the rest: Docker, firewall, SSH hardening, Postgres,
+Forgejo, MinIO, Caddy, the control plane, daily backups. At the end it prints
+the two links you hand out.
+
+If you would rather not run anything out of a pipe, fetch the bootstrap,
+read it, then run it — or skip it and drive the release artifact yourself:
 
 ```bash
 curl -fLO https://github.com/Praut-Startup-Support/AgenticDev/releases/latest/download/agenticdev-install-vps.sh
@@ -92,8 +135,8 @@ scp agenticdev-install-vps.sh root@your-vps:/root/
 ssh root@your-vps 'bash /root/agenticdev-install-vps.sh'
 ```
 
-It asks five questions and does the rest: Docker, firewall, SSH hardening,
-Tailscale, Postgres, Forgejo, MinIO, Caddy, the control plane, daily backups.
+The artifact itself refuses to run from a pipe on purpose — it has to unpack
+its own payload from a file on disk.
 
 Then verify the deployment actually works, rather than merely starts:
 
@@ -117,8 +160,12 @@ When it finishes it prints two links:
 
 | Link | Who | Where it works |
 |---|---|---|
-| **Admin panel** | you | tailnet only |
-| **Enrollment page** | your team | public internet |
+| **Admin panel** | you | Tailscale mode: tailnet only. Domain mode: any browser, behind the admin password |
+| **Enrollment page** | your team | public internet either way |
+
+It also names the administrator on that output — the name and email you gave
+during the install become a `principal` row, so the audit trail can say who
+approved a decision instead of leaving the actor blank.
 
 You pick both passwords during the install.
 
@@ -131,9 +178,10 @@ document assumes.
 ### 2. People — an account each, on the server
 
 Send the enrollment link to anyone. They open it, **give their name, surname
-and email**, type the join password, and get two commands: join the tailnet,
-and run a thin installer that sets up Tailscale and a desktop icon. No
-Docker, no WSL2 — nothing heavy lands on their machine.
+and email**, type the join password, and get the commands they need — in
+Tailscale mode, join the tailnet and then run a thin installer; in domain
+mode, just the installer. No Docker, no WSL2 — nothing heavy lands on their
+machine.
 
 They then appear in the panel under *čekají na účet*, with the exact command
 to run:
@@ -146,9 +194,23 @@ That creates their account on the VPS, generates their keys, registers them,
 and uploads their SSH key to Forgejo. They work by clicking the icon, or:
 
 ```bash
-tailscale ssh msvanda@your-vps
+tailscale ssh msvanda@your-vps      # Tailscale mode
+ssh msvanda@your-domain             # domain mode
 agenticdev
 ```
+
+**In domain mode there is one extra step**, because the tailnet is no longer
+doing the authenticating: the installer generates an SSH key on their machine
+and prints the public half. They send you that line, and you install it:
+
+```bash
+sudo agenticdev-ctl keys add msvanda "ssh-ed25519 AAAA… msvanda@mac"
+```
+
+`agenticdev-ctl user add` already installs any key that came in with a
+registration, and `agenticdev-ctl keys sync` picks up later ones. The control
+plane never writes to `authorized_keys` itself — it runs in a container and
+has no business reaching into `/home`.
 
 The first time, they sign in to a model inside Pi with `/login` — their own
 subscription or key. It stays in their own `~/.pi/agent` and is not shared,

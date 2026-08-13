@@ -184,12 +184,18 @@ def join(body: JoinRequest, request: Request):
     key = _mint_authkey(ip)
     fp = hashlib.sha256(f"{INSTANCE_ID}\n{VERIFY_KEY}".encode()).hexdigest()
 
+    # V režimu domain se do tailnetu nikdo nepřipojuje — auth key by byl
+    # matoucí krok, který nikam nevede. Stránka podle tohohle pole vynechá
+    # celý první krok a rovnou dá instalátor.
+    connect = os.environ.get("AGENTICDEV_CONNECT", "tailscale")
+
     return {
         "ok": True,
         "instance_id": INSTANCE_ID,
         "fingerprint": f"sha256:{fp}",
         "domain": AGENTICDEV_DOMAIN,
-        "tailscale_authkey": key,
+        "connect": connect,
+        "tailscale_authkey": None if connect == "domain" else key,
         # Relativně: stránka si to slepí se svou vlastní adresou, takže to
         # platí i zvenčí přes Funnel, i z tailnetu.
         "installer_url": "installer",
@@ -235,7 +241,7 @@ def installer(body: JoinRequest, request: Request):
         if not f.is_file():
             raise HTTPException(503, "install-linux.sh není nasazený")
         return PlainTextResponse(
-            f.read_text().replace("__CONTROL_PLANE__", _control_plane_url()),
+            _fill(f.read_text()),
             headers={"content-disposition": 'attachment; filename="agenticdev-install.sh"'},
         )
 
@@ -244,7 +250,7 @@ def installer(body: JoinRequest, request: Request):
         if not f.is_file():
             raise HTTPException(503, "install-windows.ps1 není nasazený")
         return PlainTextResponse(
-            f.read_text().replace("__CONTROL_PLANE__", _control_plane_url()),
+            _fill(f.read_text()),
             headers={"content-disposition": 'attachment; filename="agenticdev-install.ps1"'},
         )
 
@@ -262,6 +268,19 @@ def installer(body: JoinRequest, request: Request):
 # duplicitní route: zvenčí by Location mířila na cestu, kterou Funnel
 # nemapuje. Stránka si adresu endpointů skládá ze své vlastní (viz
 # join.html), takže jí je jedno, jak se k ní kdo dostal.
+def _fill(text: str) -> str:
+    """
+    Doplní do klientského instalátoru adresu a režim připojení.
+
+    Režim tam musí být: v `domain` se Tailscale neinstaluje a přihlašuje se
+    obyčejným SSH. Kdyby to instalátor nevěděl, sháněl by tailnet, který
+    neexistuje, a skončil by na tom.
+    """
+    return (text
+            .replace("__CONTROL_PLANE__", _control_plane_url())
+            .replace("__CONNECT__", os.environ.get("AGENTICDEV_CONNECT", "tailscale")))
+
+
 @router.get("/join", include_in_schema=False)
 @router.get("/join/", include_in_schema=False)
 def join_page():

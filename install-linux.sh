@@ -20,6 +20,10 @@ warn(){ printf "${Y}  !${O} %s\n" "$*"; }
 die() { printf "${R}✗ %s${O}\n" "$*" >&2; exit 1; }
 
 CP="${AGENTICDEV_CP:-__CONTROL_PLANE__}"
+# tailscale = přihlášení dělá tailnet, klíč neřešíme
+# domain    = obyčejné SSH, klíč se musí vygenerovat a nechat zapsat na VPS
+CONNECT="${AGENTICDEV_CONNECT:-__CONNECT__}"
+[[ "$CONNECT" == "__CONNECT__" ]] && CONNECT=tailscale
 HOME_DIR="$HOME/.agenticdev"
 BIN_DIR="$HOME/.local/bin"
 APPS="$HOME/.local/share/applications"
@@ -38,6 +42,10 @@ BANNER
 
 # ═══ 1. Tailscale ══════════════════════════════════════════════
 # Jediná síť, po které je VPS vidět. Bez ní nemá zbytek smysl.
+if [[ "$CONNECT" == "domain" ]]; then
+  step "Připojení"
+  ok "bez Tailscale — půjde se obyčejným SSH"
+else
 step "Tailscale"
 if ! command -v tailscale >/dev/null; then
   warn "instaluji Tailscale (bude chtít sudo)"
@@ -51,6 +59,7 @@ if ! tailscale status >/dev/null 2>&1; then
   read -rp "  Až budeš připojený, zmáčkni Enter. " _ </dev/tty
 fi
 tailscale status >/dev/null 2>&1 && ok "v tailnetu" || warn "tailnet zatím neběží"
+fi
 
 # ═══ 2. Kam se připojovat ══════════════════════════════════════
 step "Kde je VPS"
@@ -110,12 +119,43 @@ case ":$PATH:" in
   *) warn "$BIN_DIR není v PATH — přidej si ho do ~/.profile" ;;
 esac
 
+# ═══ SSH klíč (jen bez Tailscale) ══════════════════════════════
+# S Tailscale dělá autentizaci tailnet a klíč nikdo neřeší. Bez něj se
+# přihlašuje obyčejným SSH, takže tenhle stroj potřebuje vlastní klíč a
+# správce musí jeho veřejnou část zapsat na VPS.
+if [[ "$CONNECT" == "domain" ]]; then
+  step "SSH klíč"
+  KEYF="$HOME/.ssh/id_ed25519_agenticdev"
+  if [[ ! -f "$KEYF" ]]; then
+    mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+    ssh-keygen -q -t ed25519 -N '' -C "agenticdev-$(hostname -s 2>/dev/null || hostname)" -f "$KEYF"
+    ok "vytvořen $KEYF"
+  else
+    ok "už existuje: $KEYF"
+  fi
+  # Klíč se v konfiguraci připíše k hostu, ať se nemusí psát -i.
+  if [[ -n "$VPS_HOST" ]] && ! grep -q "id_ed25519_agenticdev" "$HOME/.ssh/config" 2>/dev/null; then
+    printf '\nHost %s\n  User %s\n  IdentityFile %s\n' "$VPS_HOST" "$LOGIN" "$KEYF" \
+      >>"$HOME/.ssh/config"
+    chmod 600 "$HOME/.ssh/config"
+    ok "zapsáno do ~/.ssh/config"
+  fi
+  echo
+  printf "  ${Y}Pošli tenhle řádek správci${O} — bez něj se nepřihlásíš:\n\n"
+  printf "    %s\n\n" "$(cat "$KEYF.pub")"
+  printf "  ${D}Správce ho zapíše: sudo agenticdev-ctl keys add %s \"<ten řádek>\"${O}\n" "$LOGIN"
+fi
+
 # ═══ 4. Zkouška ════════════════════════════════════════════════
 step "Zkouška"
 if curl -fsS --max-time 8 "$CP/v1/health" >/dev/null 2>&1; then
   ok "VPS odpovídá"
 else
-  warn "VPS neodpovídá — zkontroluj: tailscale status"
+  if [[ "$CONNECT" == "domain" ]]; then
+    warn "VPS neodpovídá — zkontroluj adresu $CP a síť"
+  else
+    warn "VPS neodpovídá — zkontroluj: tailscale status"
+  fi
 fi
 
 cat <<EOF
@@ -124,7 +164,7 @@ cat <<EOF
 
   Klikni na ikonu ${B}AgenticDev${O}, nebo z terminálu:
 
-      ${Y}tailscale ssh $LOGIN@$VPS_HOST${O}
+      ${Y}$(if [[ "$CONNECT" == "domain" ]]; then echo "ssh $LOGIN@$VPS_HOST"; else echo "tailscale ssh $LOGIN@$VPS_HOST"; fi)${O}
       ${Y}agenticdev${O}
 
   ${D}Poprvé se v Pi přihlas k modelu přes /login. Pak už to platí.${O}
