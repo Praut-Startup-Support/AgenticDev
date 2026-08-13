@@ -1,5 +1,5 @@
 fastapi==0.115.*
-uvicorn[standard]==0.34.*
+uvicorn[standard]==0.52.*
 psycopg[binary]==3.2.*
 pydantic==2.*
 PyJWT==2.*
