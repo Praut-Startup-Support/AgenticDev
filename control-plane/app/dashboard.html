@@ -123,7 +123,7 @@
       <div class="panel stat"><div class="n" id="sReady">–</div><div class="l">čeká na práci</div></div>
       <div class="panel stat"><div class="n" id="sRun">–</div><div class="l">běží teď</div></div>
       <div class="panel stat"><div class="n" id="sBlock">–</div><div class="l">čeká na tebe</div></div>
-      <div class="panel stat"><div class="n" id="sCost">–</div><div class="l">útrata dnes</div></div>
+      <div class="panel stat"><div class="n" id="sCost">–</div><div class="l" id="sCostLabel">útrata dnes</div></div>
     </div>
 
     <h2>Kdo právě pracuje</h2>
@@ -179,7 +179,9 @@
     </div>
 
     <h2>Všechny úkoly</h2>
+    <p class="hint">Klikni na úkol a uvidíš, co se s ním dělo krok po kroku.</p>
     <div id="tasks"></div>
+    <div id="timeline"></div>
   </section>
 
   <!-- ── PROJEKTY ── -->
@@ -265,7 +267,12 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Escapuje i apostrof: hodnoty se vkládají i do onclick="…('x')", kde by
+// ho dvojitá uvozovka neochránila. Deklarace je tu JEDNA — dole býval
+// druhý `function esc()`, což je v jednom scope se `const` SyntaxError a
+// shodilo to celý skript, tedy celý panel.
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const czk = n => new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:0}).format(n||0)+' Kč';
 const ago = t => { if(!t) return '–'; const s=(Date.now()-new Date(t))/1000;
   if(s<60) return 'teď'; if(s<3600) return Math.floor(s/60)+' min';
@@ -303,7 +310,15 @@ async function loadBoard(){
   $('#sReady').textContent  = c.ready||0;
   $('#sRun').textContent    = (c.assigned||0)+(c.running||0);
   $('#sBlock').textContent  = b.pending_decisions.length;
-  $('#sCost').textContent   = czk(b.spend_today_czk);
+  // Nula by se čtla jako „nic to nestálo". Dokud tokeny nikdo neohlašuje,
+  // říkáme rovnou, že se to neměří, a místo ceny ukážeme počet běhů.
+  if (b.spend_measured) {
+    $('#sCost').textContent = czk(b.spend_today_czk);
+    $('#sCostLabel').textContent = 'útrata dnes';
+  } else {
+    $('#sCost').textContent = b.runs_total ?? 0;
+    $('#sCostLabel').innerHTML = 'běhů agenta <span class="dim">(útrata se neměří)</span>';
+  }
 
   const n = b.pending_decisions.length;
   $('#decBadge').innerHTML = n ? `<span class="tag hot">${n}</span>` : '';
@@ -355,12 +370,68 @@ async function loadTasks(){
   const [ts, ps] = await Promise.all([api('/v1/tasks'), api('/v1/projects')]);
   $('#tProject').innerHTML = ps.map(p=>`<option value="${esc(p.code)}">${esc(p.code)} — ${esc(p.client_name||'')}</option>`).join('');
   $('#tasks').innerHTML = ts.length ? `<table><tr><th>Stav</th><th>Projekt</th><th>Úkol</th><th>Kdo</th><th>Rozpočet</th></tr>` +
-    ts.map(t=>`<tr>
+    ts.map(t=>`<tr onclick="timeline('${esc(t.id)}')" style="cursor:pointer">
       <td><span class="tag ${t.state==='blocked'?'hot':t.state==='done'?'ok':''}">${esc(t.state)}</span></td>
       <td class="mono">${esc(t.project)}</td><td>${esc(t.title)}</td>
       <td class="dim">${esc(t.assignee||'–')}</td>
       <td class="mono ${+t.spent_czk > +t.budget_czk ? 'tag hot':''}">${czk(t.spent_czk)} / ${czk(t.budget_czk)}</td>
     </tr>`).join('') + `</table>` : `<div class="empty">Zatím žádné úkoly.</div>`;
+}
+
+// ── časová osa úkolu ──
+// Data v ledgeru byla od začátku, chyběla jen tahle obrazovka. Skládá se ze
+// tří zdrojů: event (auditní stopa), agent_run (běhy) a decision.
+const dur = ms => !ms ? '–' : ms < 60000 ? Math.round(ms/1000)+' s'
+  : Math.floor(ms/60000)+' min '+Math.round(ms%60000/1000)+' s';
+const at = t => t ? new Date(t).toLocaleString('cs-CZ') : '–';
+
+async function timeline(id){
+  const el = $('#timeline');
+  el.innerHTML = `<div class="panel dim">načítám…</div>`;
+  let d;
+  try { d = await api(`/v1/tasks/${id}/timeline`); }
+  catch(e){ el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+
+  const rows = [
+    ...d.events.map(e => ({ts:e.ts, kind:'událost', what:e.verb,
+      detail:JSON.stringify(e.payload)})),
+    ...d.runs.map(r => ({ts:r.created_at, kind:'běh agenta',
+      what:`${r.role} · ${r.outcome||'?'}`,
+      detail:`model ${r.model} · ${dur(r.duration_ms)}`
+        + (r.transcript_uri ? ` · transkript ${r.transcript_uri.replace('file://','')}` : '')})),
+    ...d.decisions.map(x => ({ts:x.decided_at, kind:'rozhodnutí',
+      what:x.chosen||x.state, detail:x.question})),
+  ].filter(r=>r.ts).sort((a,b)=> new Date(a.ts) - new Date(b.ts));
+
+  // Nula u ceny neznamená „nic to nestálo" — znamená „nikdo to nezměřil".
+  // Tvrdit z ní útratu by bylo horší než nemít údaj vůbec.
+  const cost = d.totals.cost_measured
+    ? czk(d.totals.cost_czk)
+    : `<span class="dim">neměří se</span>`;
+
+  el.innerHTML = `
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">${esc(d.task.title)}</h3>
+        <span class="tag ${d.task.state==='blocked'?'hot':d.task.state==='done'?'ok':''}">${esc(d.task.state)}</span>
+      </div>
+      <p class="dim mono" style="margin:6px 0 14px">
+        ${esc(d.task.project)} · fáze ${esc(d.task.phase)} ·
+        běhů ${d.totals.runs} · čas ${dur(d.totals.duration_ms)} · útrata ${cost}
+      </p>
+      ${!d.totals.cost_measured && d.totals.runs
+        ? `<p class="hint">Tokeny a cenu dnes nikdo neohlašuje — Pi je nevydává.
+             Zapisuje se model, doba běhu, výsledek a transkript.</p>` : ''}
+      ${rows.length ? `<table><tr><th>Kdy</th><th>Co</th><th>Stalo se</th><th>Podrobnost</th></tr>` +
+        rows.map(r=>`<tr>
+          <td class="dim mono" style="width:150px;white-space:nowrap">${esc(at(r.ts))}</td>
+          <td class="mono" style="width:100px">${esc(r.kind)}</td>
+          <td>${esc(r.what)}</td>
+          <td class="dim mono" style="word-break:break-all">${esc((r.detail||'').slice(0,160))}</td>
+        </tr>`).join('') + `</table>`
+        : `<div class="empty">S tímhle úkolem se ještě nic nestalo.</div>`}
+    </div>`;
+  el.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 async function newTask(){
   const dod = $('#tDod').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -523,11 +594,6 @@ async function saveSettings(){
   } catch(e) {
     $('#setMsg').textContent = 'nepovedlo se: ' + e.message;
   }
-}
-
-function esc(x){
-  return String(x ?? '').replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 function boot(){ loadBoard(); setInterval(()=>{ if($('#prehled').classList.contains('on')) loadBoard(); }, 15000); }

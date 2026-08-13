@@ -148,6 +148,44 @@ agenticdev-ctl smoke   # „bundle přišpendluje model všem stejně (…)"
 
 ---
 
+---
+
+## Čím se to dá zkontrolovat a doladit
+
+Metriky ani trace tu nejsou. Co tu je, je záznam po ději — a ten na ladění
+stačí:
+
+| Kde | Co v tom je |
+|---|---|
+| tabulka `event` | auditní stopa, append-only, hash-chained. Databáze na ní odmítne `UPDATE`, `DELETE` i `TRUNCATE` |
+| tabulka `agent_run` | řádek na běh: role, model, doba, výsledek, cesta k transkriptu |
+| `/trees/.transcripts/*.log` | úplný transkript automatického běhu: každý prompt, výstup agenta, a **celý** výpis každé selhané kontroly |
+| panel → Úkoly → klik na úkol | časová osa: události, běhy a rozhodnutí v jedné řadě |
+| `git notes` + `Task-Id:` | ze které session je konkrétní řádek |
+
+Dvě věci, na kterých záleží, když to chceš ladit:
+
+- **Transkript leží na hostiteli, ne v podu.** `/trees` je připojený z
+  domovského adresáře toho člověka na VPS, takže teardown na něj nedosáhne.
+  Kdyby byl v podu, přišel bys o něj přesně u toho běhu, který nikdo
+  nesledoval.
+- **Do promptu agenta jde z padlé kontroly jen 25 řádků**, aby se nezahltil.
+  Do transkriptu jde celý výpis. Ladíš tedy z úplného, ne z ocasu.
+
+**Útrata se neměří a panel to říká rovnou.** Zapisuje se model, doba,
+výsledek a transkript; tokeny neohlašuje nikdo, takže `cost_czk` zůstává
+nulový. Panel proto místo `0 Kč` píše „útrata se neměří" — nula by se
+čtla jako „zdarma". Skutečná čísla potřebují údaje o spotřebě z modelového
+klienta harnessu, a než budou, žádné číslo si nevymýšlíme.
+
+**Jak to ověřit:**
+
+```bash
+agenticdev-ctl smoke   # „N běhů agenta v ledgeru", časová osa, skript panelu
+```
+
+---
+
 ## Co tímhle pořád není vyřešené
 
 Poctivě, ať se to nehledá v kódu:
@@ -160,4 +198,11 @@ Poctivě, ať se to nehledá v kódu:
   logu jako varování. Prázdná brána není brána.
 - **Sdílené prostředí je tenké.** Instrukce, čtyři skills, git nástroj,
   model. Žádné hooky ani subagenty — v Pi vrstvě zatím nejsou.
-- **Chybí observabilita**, takže „stejně se chovají" se dnes neměří.
+- **Útrata se neměří**, takže „vyplatí se to u téhle zakázky" se dnes
+  nezodpoví. Doba běhu a výsledek ano.
+- **Interaktivní session nemá transkript od nás.** Píše si ho Pi do
+  `~/.pi/agent` toho člověka. Tee děláme jen u automatického běhu, protože
+  u interaktivního bychom rozbili obrazovku.
+- **Běh bez přiděleného úkolu se nezapíše.** `agent_run.task_id` je
+  `NOT NULL`. Harness to řekne na obrazovku, ale v ledgeru po takové
+  session nezůstane nic.

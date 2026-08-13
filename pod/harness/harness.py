@@ -39,6 +39,18 @@ import time
 
 POLICY = pathlib.Path("/run/agenticdev/policy.json")
 WORKSPACE = pathlib.Path("/workspace")
+TOKEN = pathlib.Path("/run/agenticdev/token")
+
+# Transkripty musí ležet na hostiteli, ne v podu — pod se po skončení
+# zbourá a s ním by zmizelo všechno, podle čeho se dá běh doladit nebo
+# za půl roku přehrát. `/trees` je připojený z domovského adresáře toho
+# člověka na VPS, takže teardown na něj nedosáhne.
+TREES = pathlib.Path(os.environ.get("AGENTICDEV_TREES", "/trees"))
+
+# Cestu k transkriptu zakládá main() a čte ji _agent_env(), kterou volá
+# jak interaktivní session, tak director. Globál je tu proto, aby se
+# nemusela protahovat podpisem funkcí, které o transkriptu nic neřeší.
+_TRANSCRIPT: "pathlib.Path | None" = None
 
 C_OK, C_WARN, C_ERR, C_DIM, C_OFF = "\033[1;32m", "\033[1;33m", "\033[1;31m", "\033[2m", "\033[0m"
 
@@ -204,6 +216,8 @@ def _agent_env(p: dict) -> dict:
         # `/skill:rozhodnuti` neudělá nic — precedenty by se přestaly
         # zapisovat a nikdo by si toho nevšiml, protože chybí tiše.
         "AGENTICDEV_CP": str(p.get("control_plane") or ""),
+        # Director si podle tohohle teče do transkriptu. Prázdno = nezapisuj.
+        "AGENTICDEV_TRANSCRIPT": str(_TRANSCRIPT or ""),
         "PATH": f"/workspace/bin:{env.get('PATH', '')}",
         # Pod má uzavřený egress, takže cokoli, co Pi zkouší na startu
         # mimo allowlist, jen čeká na timeout. Vypnout to je rychlost,
@@ -229,6 +243,84 @@ def _agent_env(p: dict) -> dict:
         print(f"{C_WARN}  V {pi_dir} není auth.json — v Pi se přihlas přes /login.{C_OFF}")
 
     return env
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Transkript a záznam běhu
+# ═══════════════════════════════════════════════════════════════
+def open_transcript(p: dict) -> pathlib.Path | None:
+    """
+    Založí soubor pro transkript a vrátí cestu. Když to nejde, vrátí None a
+    jede se dál — chybějící transkript nesmí zabránit práci.
+
+    Jméno nese čas a úkol, ať se v tom dá hledat bez databáze.
+    """
+    task = (p.get("task") or {}).get("id") or "bez-ukolu"
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    d = TREES / ".transcripts"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        f = d / f"{stamp}-{p['project']}-{str(task)[:8]}.log"
+        f.write_text(
+            f"# AgenticDev transkript\n"
+            f"# projekt {p['project']} · fáze {p['phase']} · data {p['data_class']}\n"
+            f"# úkol {task}\n# začátek {stamp}\n\n")
+        return f
+    except OSError as e:
+        print(f"{C_DIM}  (transkript se nepodařilo založit: {e}){C_OFF}")
+        return None
+
+
+def report_run(p: dict, role: str, outcome: str, duration_ms: int,
+               transcript: pathlib.Path | None) -> None:
+    """
+    Zapíše běh do ledgeru (`agent_run`), aby v panelu bylo vidět, co se
+    dělo, jak dlouho a s jakým výsledkem.
+
+    Tokeny a cenu tu záměrně NEPOSÍLÁME. Harness je nezná — Pi je dnes
+    neohlašuje — a vymyslet je by znamenalo dát do auditní stopy číslo,
+    které si nikdo neověří. Nula je poctivější než odhad, o kterém se za
+    měsíc bude věřit, že je to měření.
+
+    Selhání zápisu se jen zaloguje: nepovedený záznam nesmí shodit práci,
+    která už je hotová.
+    """
+    task = (p.get("task") or {}).get("id") or p.get("task_id")
+    cp = p.get("control_plane")
+    if not (task and cp):
+        # Bez úkolu není kam běh přivěsit — `agent_run.task_id` je NOT NULL
+        # a odkazuje na `task`. Interaktivní session bez přiděleného úkolu
+        # se tedy nezapíše, a je lepší to říct než tiše mlčet.
+        print(f"{C_DIM}  (běh se nezapsal: {'není úkol' if not task else 'není control plane'}){C_OFF}")
+        return
+    try:
+        tok = TOKEN.read_text().strip()
+    except OSError:
+        print(f"{C_DIM}  (běh se nezapsal: chybí token stanice){C_OFF}")
+        return
+
+    allow = p.get("model_allowlist") or []
+    body = json.dumps({
+        "task_id": str(task),
+        "work_order_id": p.get("work_order_id"),
+        "role": role,
+        "state_name": p.get("phase"),
+        "model": str(p.get("model") or (allow[0] if allow else "neurčeno")),
+        "duration_ms": duration_ms,
+        "outcome": outcome,
+        "transcript_uri": f"file://{transcript}" if transcript else None,
+    }).encode()
+
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(
+        f"{cp}/v1/runs", data=body, method="POST",
+        headers={"content-type": "application/json", "Authorization": f"Bearer {tok}"})
+    try:
+        urllib.request.urlopen(req, timeout=10).read()
+        note(f"běh zapsán do ledgeru ({outcome}, {duration_ms // 1000} s)")
+    except (urllib.error.URLError, OSError) as e:
+        print(f"{C_DIM}  (běh se nezapsal: {e}){C_OFF}")
 
 
 def run_agent(p: dict) -> int:
@@ -288,6 +380,14 @@ def main() -> int:
     if p["data_class"] == "restricted":
         print(f"  {C_WARN}Citlivá data — cloudové modely jsou tu zakázané.{C_OFF}")
 
+    global _TRANSCRIPT
+    _TRANSCRIPT = open_transcript(p)
+    if _TRANSCRIPT:
+        note(f"transkript {_TRANSCRIPT}")
+
+    t0 = time.monotonic()
+    ms = lambda: int((time.monotonic() - t0) * 1000)          # noqa: E731
+
     # S work orderem jede úkol podle postupu, který vynucuje director
     # (ADR-0003): kontroly projektu rozhodují, ne agent. Bez work orderu
     # není co vynucovat, takže se otevře interaktivní session.
@@ -297,11 +397,21 @@ def main() -> int:
             import director
         except ImportError as e:
             print(f"  {C_WARN}director.py chybí ({e}) — otevírám interaktivní session.{C_OFF}")
-            return run_agent(p)
+            rc = run_agent(p)
+            report_run(p, "interactive", f"exit:{rc}", ms(), _TRANSCRIPT)
+            return rc
         print(f"  {C_DIM}úkol{C_OFF} {p['task'].get('title', '?')}")
-        return 0 if director.drive(p, _agent_env(p)) in ("done", "review") else 1
+        outcome = director.drive(p, _agent_env(p))
+        report_run(p, "director", outcome, ms(), _TRANSCRIPT)
+        return 0 if outcome in ("done", "review") else 1
 
-    return run_agent(p)
+    rc = run_agent(p)
+    # Interaktivní session píše svůj vlastní transkript Pi do /pi (na
+    # člověka, přežije teardown), takže tady zapisujeme jen to, co víme
+    # my: model, dobu, výsledek. Bez přiděleného úkolu se nezapíše nic a
+    # report_run to řekne — `agent_run` na `task` odkazuje povinně.
+    report_run(p, "interactive", f"exit:{rc}", ms(), _TRANSCRIPT)
+    return rc
 
 
 if __name__ == "__main__":

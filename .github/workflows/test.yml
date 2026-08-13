@@ -43,7 +43,30 @@ jobs:
             | xargs -r shellcheck -S warning || true
 
       - name: Parse Python
-        run: python3 -c "import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]" control-plane/app/*.py
+        run: python3 -c "import ast,sys;[ast.parse(open(f).read()) for f in sys.argv[1:]]" control-plane/app/*.py pod/harness/*.py
+
+      # Panel je jeden HTML soubor s vloženým skriptem. Jedna chyba v něm
+      # neshodí obrazovku, ale celý skript — tedy i přihlášení. Přesně tak
+      # tam roky ležel `const esc` vedle `function esc`: SyntaxError, mrtvý
+      # panel, a smoke test to nechytil, protože ten testuje API curlem.
+      - name: Parse embedded JavaScript
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, subprocess, sys
+          fail = 0
+          for f in sorted(pathlib.Path("control-plane/app").glob("*.html")):
+              for i, s in enumerate(re.findall(r"<script>(.*?)</script>", f.read_text(), re.S)):
+                  p = pathlib.Path(f"/tmp/{f.stem}-{i}.js")
+                  p.write_text(s)
+                  r = subprocess.run(["node", "--check", str(p)],
+                                     capture_output=True, text=True)
+                  if r.returncode:
+                      print(f"::error file={f}::skript se neparsuje\n{r.stderr}")
+                      fail = 1
+                  else:
+                      print(f"  ok {f} (blok {i})")
+          sys.exit(fail)
+          PY
 
   # ── Git automatizace je to, co obsluhuje lidi bez znalosti gitu ────
   # Běží na dočasném repozitáři v /tmp, nic mimo něj nesahá. Bez téhle

@@ -322,6 +322,67 @@ if [[ -n "${PROJ:-}" && -f "$CK" ]]; then
   fi
 fi
 
+# ═══ 8c. Záznam běhů a časová osa ══════════════════════════════
+hdr "Co je vidět, když se něco stane"
+if [[ -f "$CK" ]]; then
+  BOARD=$(curl -fsS --max-time 10 -b "$CK" "$API/v1/board" 2>/dev/null || true)
+  if [[ -n "$BOARD" ]]; then
+    RUNS=$(printf '%s' "$BOARD" | jqr "['runs_total']")
+    MEAS=$(printf '%s' "$BOARD" | jqr "['spend_measured']")
+    if [[ "$RUNS" == "0" ]]; then
+      warn "v ledgeru není žádný běh agenta — po prvním úkolu tu musí být aspoň 1"
+      info "zapisuje ho harness na konci běhu (POST /v1/runs)"
+    else
+      ok "$RUNS běhů agenta v ledgeru"
+    fi
+    [[ "$MEAS" == "False" || "$MEAS" == "false" ]] \
+      && info "útrata se neměří (tokeny neohlašuje nikdo) — panel to říká místo nuly"
+  else
+    warn "nástěnku se nepodařilo přečíst"
+  fi
+
+  # Časová osa musí odpovědět i pro úkol, se kterým se ještě nic nestalo.
+  TID=$(curl -fsS --max-time 10 -b "$CK" "$API/v1/tasks" 2>/dev/null \
+        | python3 -c "import json,sys
+t=json.load(sys.stdin)
+print(t[0]['id'] if t else '')" 2>/dev/null || true)
+  if [[ -n "$TID" ]]; then
+    TL=$(curl -fsS --max-time 10 -b "$CK" "$API/v1/tasks/$TID/timeline" 2>/dev/null || true)
+    if printf '%s' "$TL" | grep -q '"totals"'; then
+      ok "časová osa úkolu se načte ($(printf '%s' "$TL" | jqr "['totals']['runs']") běhů, $(printf '%s' "$TL" | python3 -c "import json,sys;print(len(json.load(sys.stdin)['events']))" 2>/dev/null) událostí)"
+    else
+      bad "časová osa nevrátila data: $(printf '%s' "$TL" | head -c 100)"
+    fi
+  else
+    warn "žádný úkol — časovou osu nezkusím"
+  fi
+
+  # Panel je jeden HTML soubor s vloženým skriptem: jedna chyba v něm
+  # neshodí obrazovku, ale celý skript, tedy i přihlášení. Přes API se to
+  # nepozná, proto se to kontroluje tady.
+  if command -v node >/dev/null 2>&1; then
+    if (cd "$SRC" && python3 - <<'PY'
+import pathlib, re, subprocess, sys
+bad = 0
+for f in sorted(pathlib.Path("control-plane/app").glob("*.html")):
+    for i, s in enumerate(re.findall(r"<script>(.*?)</script>", f.read_text(), re.S)):
+        p = pathlib.Path(f"/tmp/smoke-{f.stem}-{i}.js"); p.write_text(s)
+        if subprocess.run(["node", "--check", str(p)], capture_output=True).returncode:
+            print(f"  {f}", file=sys.stderr); bad = 1
+sys.exit(bad)
+PY
+    ) 2>/dev/null; then
+      ok "skript panelu se parsuje"
+    else
+      bad "skript panelu se NEPARSUJE — panel je v prohlížeči mrtvý včetně přihlášení"
+    fi
+  else
+    info "node není na VPS — skript panelu nezkontroluju (dělá to CI)"
+  fi
+else
+  warn "bez přihlášení do panelu tyhle kontroly nezkusím"
+fi
+
 # ═══ 8b. Pody se pouští na VPS ═════════════════════════════════
 hdr "Launcher na VPS"
 command -v agenticdev >/dev/null \

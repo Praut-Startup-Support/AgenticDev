@@ -665,6 +665,54 @@ def list_tasks(state: str | None = None, op: dict = Depends(operator)):
         return c.execute(q + " ORDER BY t.priority, t.created_at LIMIT 200").fetchall()
 
 
+@router.get("/v1/tasks/{task_id}/timeline")
+def task_timeline(task_id: str, op: dict = Depends(operator)):
+    """
+    Co se s úkolem dělo, krok po kroku.
+
+    Data v ledgeru jsou od začátku, chyběla jen obrazovka. Skládá se to ze
+    tří zdrojů: `event` (auditní stopa, append-only), `agent_run` (běhy
+    agenta s modelem, dobou a transkriptem) a `decision` (co odklikl
+    člověk). Dohromady je z toho odpověď na „kde se co pokazilo".
+    """
+    with db() as c:
+        task = c.execute(
+            """SELECT t.id, t.title, t.state, t.budget_czk, p.code AS project,
+                      ph.kind AS phase
+               FROM task t JOIN phase ph ON ph.id = t.phase_id
+               JOIN project p ON p.id = ph.project_id
+               WHERE t.id = %s""", (task_id,)).fetchone()
+        if not task:
+            raise HTTPException(404, "úkol neexistuje")
+
+        events = c.execute(
+            """SELECT ts, verb, payload, actor_id FROM event
+               WHERE subject_type = 'task' AND subject_id = %s
+               ORDER BY ts""", (task_id,)).fetchall()
+        runs = c.execute(
+            """SELECT created_at, role, state_name, model, duration_ms, outcome,
+                      tokens_in, tokens_out, cost_czk, transcript_uri
+               FROM agent_run WHERE task_id = %s ORDER BY created_at""",
+            (task_id,)).fetchall()
+        decisions = c.execute(
+            """SELECT decided_at, question, chosen, rationale, state, adr_ref
+               FROM decision WHERE task_id = %s ORDER BY created_at""",
+            (task_id,)).fetchall()
+
+    totals = {
+        "runs": len(runs),
+        "duration_ms": sum(r["duration_ms"] or 0 for r in runs),
+        "cost_czk": float(sum(r["cost_czk"] or 0 for r in runs)),
+        "tokens": sum((r["tokens_in"] or 0) + (r["tokens_out"] or 0) for r in runs),
+    }
+    # Tokeny dnes nikdo neohlašuje (Pi je nevydává), takže cena zůstává
+    # nulová. Říkáme to rovnou, aby se nula nečetla jako „nic to nestálo".
+    totals["cost_measured"] = totals["tokens"] > 0
+
+    return {"task": task, "events": events, "runs": runs,
+            "decisions": decisions, "totals": totals}
+
+
 # ═══════════════════════════════════════════════════════════════
 #  Rozhodnutí
 # ═══════════════════════════════════════════════════════════════
@@ -794,8 +842,15 @@ def board(op: dict = Depends(operator)):
         recent = c.execute(
             """SELECT ts, subject_type, verb, payload FROM event
                ORDER BY seq DESC LIMIT 25""").fetchall()
+        # Nula u útraty má dva různé významy: „nic se neutratilo" a „nikdo
+        # to nezměřil". Tokeny dnes neohlašuje nikdo (Pi je nevydává), takže
+        # bez tohohle příznaku by panel tvrdil, že agentní vývoj je zdarma.
+        runs = c.execute(
+            """SELECT count(*) AS n, COALESCE(SUM(tokens_in + tokens_out),0) AS tok
+               FROM agent_run""").fetchone()
     return {"platform": state, "task_counts": {r["state"]: r["n"] for r in counts},
             "spend_today_czk": float(spend["today"]), "spend_month_czk": float(month["m"]),
+            "runs_total": runs["n"], "spend_measured": runs["tok"] > 0,
             "pending_decisions": pending, "active_work": active, "recent_events": recent}
 
 

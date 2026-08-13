@@ -101,9 +101,8 @@ Jsou popsané v README i SECURITY.md. Nejsou to překvapení, ale nedělej,
 | Repozitář bez testů projde branou nazeleno | prázdná brána není brána; workflow to hlásí jen jako varování v logu |
 | Orchestrační vrstva (directors) neexistuje | postup vynucují kontroly projektu v harnessu (ADR-0003) |
 | Join heslo nemá expiraci | odvolání = změna hesla všem |
-| Počítání tokenů `len/3` | útrata v panelu je orientační |
-| Chybí observabilita | Grafana a Loki zakomentované |
-| Ceny modelů neověřené | `PRICING` je odhad |
+| Útrata se neměří | tokeny neohlašuje nikdo; `cost_czk` je 0 a panel píše „neměří se" místo `0 Kč`. `PRICING` v kódu nikdy nebyla, `len/3` je rozpočtová brána na kontext |
+| Chybí metriky a trace | Grafana, Loki, Prometheus, Tempo zakomentované. Ledger, `agent_run`, transkripty a časová osa úkolu ale fungují |
 
 Pořadí, v jakém by se to mělo řešit, je v README v sekci o omezeních.
 
@@ -157,6 +156,24 @@ tiše nechránit nic.
 **Dokumentace popisovala věci, které v kódu nebyly.** Stalo se to opakovaně
 (pod, harness, egress-proxy, directors, `.claude/settings.json`). Než něco
 napíšeš do README, ověř `grep`em, že to existuje.
+
+**Panel je jeden HTML soubor s jedním `<script>`.** Jedna syntaktická chyba
+v něm neshodí jednu obrazovku, ale celý skript — tedy i přihlášení. Přesně
+tak tam ležel `const esc` vedle `function esc()`: v jednom scope je to
+`SyntaxError`, panel byl v prohlížeči mrtvý a přes API se to nepoznalo,
+protože smoke test panel testuje curlem. Kontroluje to teď CI (`Parse
+embedded JavaScript`) i `smoke`. Když přidáváš do panelu funkci, ověř, že
+jméno není použité dvakrát.
+
+**Transkripty musí ležet na `/trees`.** Je to jediná zapisovatelná cesta
+připojená z hostitele; `/workspace` je scope-omezený a `/run/agenticdev` je
+tmpfs, který teardown smaže. Kdyby to někdo přesunul do podu, ztratí se
+přesně ten záznam, podle kterého se automatický běh dá doladit.
+
+**Do `agent_run` neposílej tokeny ani cenu, dokud je někdo neměří.** Harness
+je nezná — Pi je neohlašuje. Vymyšlené číslo v auditní stopě je horší než
+prázdné pole, protože se za měsíc bude čít jako měření. Panel proto
+rozlišuje „nula" a „neměří se" příznakem `spend_measured`.
 
 **Na `event` nesmí být pravidlo (RULE).** Append-only vynucuje trigger
 `event_no_change`, ne `CREATE RULE ... DO INSTEAD NOTHING`. Pravidlo na

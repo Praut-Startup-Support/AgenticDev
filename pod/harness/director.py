@@ -41,12 +41,40 @@ C_OK, C_WARN, C_ERR, C_DIM, C_OFF = (
     "\033[1;32m", "\033[1;33m", "\033[1;31m", "\033[2m", "\033[0m")
 
 
+# Transkript zakládá harness na hostiteli (`/trees/.transcripts/…`), tady
+# se do něj jen dopisuje. Prázdná proměnná = nezapisovat. Bez tohohle je
+# všechno, co director vypíše, ztracené v momentě, kdy se pod zbourá — a
+# právě tenhle běh nikdo nesleduje, takže je to jediný záznam.
+_LOG = pathlib.Path(os.environ["AGENTICDEV_TRANSCRIPT"]) \
+    if os.environ.get("AGENTICDEV_TRANSCRIPT") else None
+
+
+def _log(text: str) -> None:
+    """Dopíše do transkriptu. Selhání ignoruje — na zápisu logu běh nestojí."""
+    if not _LOG:
+        return
+    try:
+        with _LOG.open("a") as f:
+            f.write(text.rstrip() + "\n")
+    except OSError:
+        pass
+
+
+def _plain(msg: str) -> str:
+    """Bez barev — do souboru escape sekvence nepatří."""
+    for c in (C_OK, C_WARN, C_ERR, C_DIM, C_OFF):
+        msg = msg.replace(c, "")
+    return msg
+
+
 def _say(msg: str) -> None:
     print(f"  {msg}", flush=True)
+    _log(f"  {_plain(msg)}")
 
 
 def _step(n: int, total: int, name: str) -> None:
     print(f"\n{C_OK}▍{C_OFF} {n}/{total}  {name}", flush=True)
+    _log(f"\n== {n}/{total}  {name}  [{time.strftime('%H:%M:%SZ', time.gmtime())}]")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -88,6 +116,10 @@ def run_checks(checks: list[tuple[str, list[str]]], ws: pathlib.Path) -> tuple[b
         if not shutil.which(cmd[0]):
             return False, f"{name}: {cmd[0]} není v obrazu podu"
         p = subprocess.run(cmd, cwd=str(ws), capture_output=True, text=True)
+        # Do transkriptu jde celý výpis, ne jen ocas. Do promptu agenta se
+        # posílá 25 řádků, aby se nezahltil, ale ladit se musí z úplného.
+        _log(f"\n--- {name}: {' '.join(cmd)} (exit {p.returncode})\n"
+             + (p.stdout + p.stderr).strip())
         if p.returncode != 0:
             tail = (p.stdout + p.stderr).strip().splitlines()[-25:]
             return False, f"{name} spadly:\n" + "\n".join(tail)
@@ -178,9 +210,22 @@ def agent_turn(prompt: str, env: dict, deadline: float | None,
     timeout = None
     if deadline:
         timeout = max(60, int(deadline - time.time()))
+
+    cmd = [pi, "-a", "-p", prompt]
+    if _LOG and shutil.which("bash") and shutil.which("tee"):
+        _log(f"\n--- kolo agenta ({time.strftime('%H:%M:%SZ', time.gmtime())})\n"
+             f"--- prompt:\n{prompt}\n--- výstup:")
+        # Výstup má jít na obrazovku i do souboru zároveň, proto tee.
+        # `-o pipefail`, aby se vrátil návratový kód Pi a ne kód tee —
+        # bez toho by selhané kolo vypadalo jako úspěšné.
+        # Prompt jde proměnnou prostředí: má víc řádků a uvozovky, na
+        # příkazové řádce by se rozsypal.
+        env = {**env, "AGENTICDEV_PROMPT": prompt}
+        cmd = ["bash", "-o", "pipefail", "-c",
+               '"$0" -a -p "$AGENTICDEV_PROMPT" 2>&1 | tee -a "$AGENTICDEV_TRANSCRIPT"',
+               pi]
     try:
-        p = subprocess.run([pi, "-a", "-p", prompt], cwd=str(ws), env=env,
-                           timeout=timeout)
+        p = subprocess.run(cmd, cwd=str(ws), env=env, timeout=timeout)
         return p.returncode
     except subprocess.TimeoutExpired:
         _say(f"{C_WARN}vypršel lease uprostřed kola{C_OFF}")
@@ -284,4 +329,6 @@ def drive(policy: dict, env: dict, ws: pathlib.Path = WORKSPACE) -> str:
     print()
     color = C_OK if outcome in ("done", "review") else C_ERR
     _say(f"{color}výsledek: {outcome}{C_OFF}")
+    _log(f"\n# konec {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} · "
+         f"výsledek {outcome} · oprav {n}")
     return outcome

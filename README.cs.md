@@ -242,11 +242,17 @@ Poctivý stav. Vedeno jako blokátory verze 1.0:
   červenou kontrolu zablokovat merge, neber to jako dokázané.
 - **Repozitář bez testů projde branou nazeleno.** Workflow to napíše do logu
   jako varování. Prázdná brána není brána.
-- **Chybí observabilita.** Grafana a Loki jsou v compose zakomentované,
-  harness loguje na stdout.
+- **Chybí metriky a trace.** Grafana, Loki, Prometheus i Tempo jsou v
+  compose zakomentované. Co máš: ledger, záznam každého běhu, transkript
+  ke každému běhu a časovou osu úkolu v panelu — viz
+  [Co je vidět, když se něco stane](#co-je-vidět-když-se-něco-stane).
 - **Join tokeny nemají expiraci** a jsou na instanci, ne na osobu.
-- **Počítání tokenů je odhad** (`len/3`) a ceny v `PRICING` nejsou ověřené.
-  Útrata v nástěnce je orientační.
+- **Útrata se neměří a panel to říká.** Ke každému běhu se zapíše model,
+  doba, výsledek a transkript, ale tokeny neohlašuje nikdo — `cost_czk`
+  proto zůstává nulový a panel místo `0 Kč` píše „útrata se neměří", což by
+  se čtlo jako „zdarma". Skutečná čísla potřebují údaje o spotřebě z
+  modelového klienta harnessu. (To `len/3` je rozpočtová brána na velikost
+  kontextu, ne útrata; tabulka `PRICING` neexistuje.)
 - **Orchestrační vrstva (directors) neexistuje.** Architektonický rozbor ji
   popisuje, v kódu není. Postup úkolu vynucují kontroly projektu v harnessu
   ([ADR-0003](docs/adr/0003-postup-ukolu-vynucuje-harness.md)).
@@ -257,6 +263,24 @@ Poctivý stav. Vedeno jako blokátory verze 1.0:
 Bezpečnostní dopady najdeš v [SECURITY.md](SECURITY.md).
 
 ---
+
+## Co je vidět, když se něco stane
+
+Žádný stack na metriky tu není. Co tu je, je záznam, který si po ději
+přečteš — a to je to, co potřebuješ k ladění:
+
+| Kde | Co v tom je |
+|---|---|
+| tabulka `event` | auditní stopa, append-only, hash-chained; databáze na ní odmítne `UPDATE`, `DELETE` i `TRUNCATE` |
+| tabulka `agent_run` | řádek na běh: role, model, doba, výsledek, cesta k transkriptu. Zapisuje harness na konci běhu |
+| `/trees/.transcripts/*.log` | úplný transkript automatického běhu — každý prompt, výstup agenta a **celý** výpis každé selhané kontroly (do promptu agenta jde jen posledních 25 řádků). Leží v domovském adresáři toho člověka na VPS, takže teardown podu na něj nedosáhne |
+| panel → Úkoly → klik na úkol | časová osa: události, běhy a rozhodnutí v jedné řadě |
+| `git notes` + `Task-Id:` | ze které session je konkrétní řádek — `agenticdev-git who src/a.ts 42` |
+
+Interaktivní session si transkript vede sama: Pi ho píše do `~/.pi/agent`
+toho člověka, což teardown taky přežije. Běh bez přiděleného úkolu se
+nezapíše vůbec — `agent_run.task_id` je `NOT NULL` — a harness to řekne na
+obrazovku, místo aby to tiše spolkl.
 
 ## Na čem stojí ty tři věci, kvůli kterým se to staví
 
