@@ -1,7 +1,7 @@
-fastapi==0.115.*
-uvicorn[standard]==0.34.*
+fastapi==0.141.*
+uvicorn[standard]==0.52.*
 psycopg[binary]==3.2.*
 pydantic==2.*
 PyJWT==2.*
-cryptography==44.*
+cryptography==50.*
 httpx==0.28.*
