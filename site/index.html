@@ -40,6 +40,18 @@
 
   #rd, #dots{position:absolute; top:0; left:0; z-index:0; pointer-events:none}
   #scrim{position:fixed; inset:0; z-index:0; pointer-events:none; background:rgba(3,4,3,.55)}
+  /* Mřížka končila pod hero a zbytek stránky byl plochá čerň — dolní
+     polovina pak působila jako jiný web. Tenhle přetisk ji vede až do
+     patičky, tak slabě, že se dá jen tušit; drží to stránku jako jeden
+     povrch. Fixed, aby při scrollu stála a obsah po ní klouzal. */
+  #weave{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:linear-gradient(to right, rgba(226,240,226,.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(226,240,226,.055) 1px, transparent 1px);
+    background-size:88px 88px;
+    -webkit-mask-image:radial-gradient(ellipse 120% 75% at 50% 40%, #000 25%, transparent 85%);
+    mask-image:radial-gradient(ellipse 120% 75% at 50% 40%, #000 25%, transparent 85%);
+  }
   .site{position:relative; z-index:1}
 
   .wrap{max-width:var(--w); margin:0 auto; padding:0 24px}
@@ -76,10 +88,7 @@
   }
   header .wrap{display:flex; align-items:center; gap:18px; height:58px}
   .brand{display:flex; align-items:center; gap:9px; font:700 14px/1 var(--mono); color:var(--ink); text-decoration:none}
-  .brand .mark{
-    display:grid; place-items:center; width:22px; height:22px; border-radius:4px;
-    background:var(--fosfor); color:#0a0f0a; font-size:12px;
-  }
+  .brand .mark{display:block; width:22px; height:22px; flex-shrink:0}
   nav{margin-left:auto; display:flex; align-items:center; gap:22px}
   .navlinks{display:flex; align-items:center; gap:22px}
   .navlinks a{
@@ -132,8 +141,23 @@
   .term-head i.r{background:rgba(255,95,86,.7)} .term-head i.y{background:rgba(240,214,74,.7)} .term-head i.g{background:rgba(163,255,92,.7)}
   .term-head span{margin-left:8px; font:600 11px var(--mono); color:var(--dim2); letter-spacing:.03em}
   .term-body{min-height:266px; padding:16px; font:13px/1.7 var(--mono)}
+  /* V hero se text dopisuje, takže pevná výška drží layout v klidu. Ve
+     statickém terminálu u instalace je z té výšky jen díra pod posledním
+     řádkem — tam se má box smrsknout na obsah. */
+  .term-static .term-body{min-height:0}
   .term-body p{margin:0}
   .tin{color:var(--ink)} .tok{color:var(--fosfor)} .twarn{color:var(--yellow)} .tdeny{color:var(--deny)} .tmuted{color:var(--dim)}
+
+  /* Předěl sekcí byl jedna plochá linka. Slabý zelený nádech uprostřed z ní
+     dělá hranu, přes kterou světlo přechází — sekce na sebe navazují místo
+     aby na sobě ležely jako desky. */
+  section{position:relative}
+  section::before{
+    content:""; position:absolute; top:-1px; left:0; right:0; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(163,255,92,.22), transparent);
+    pointer-events:none;
+  }
+  .hero::before{display:none}
 
   /* ── sections ── */
   section{padding:80px 0; border-top:1px solid var(--line); position:relative}
@@ -274,7 +298,7 @@
   footer{border-top:1px solid var(--line); padding:34px 0; color:var(--dim2); font-size:13px; font-family:var(--mono)}
   footer .wrap{display:flex; gap:18px; flex-wrap:wrap; align-items:center}
   footer .fbrand{display:flex; align-items:center; gap:8px; font-weight:700; color:var(--ink)}
-  footer .fbrand .mark{display:grid; place-items:center; width:18px; height:18px; border-radius:4px; background:var(--fosfor); color:#0a0f0a; font-size:10px}
+  footer .fbrand .mark{display:block; width:18px; height:18px; flex-shrink:0}
   footer a{color:var(--dim); text-decoration:none}
   footer a:hover{color:var(--fosfor)}
   footer .sp{margin-left:auto}
@@ -291,13 +315,14 @@
 <canvas id="rd" aria-hidden="true"></canvas>
 <canvas id="dots" aria-hidden="true"></canvas>
 <div id="scrim" aria-hidden="true"></div>
+<div id="weave" aria-hidden="true"></div>
 
 <div class="site">
 
 <header>
   <div class="wrap">
     <a href="#top" class="brand">
-      <span class="mark">◆</span>
+      <svg class="mark" viewBox="0 0 22 22" aria-hidden="true"><rect width="22" height="22" rx="4" fill="var(--fosfor)"/><path d="M11 5.6 16.4 11 11 16.4 5.6 11z" fill="#0a0f0a"/></svg>
       <span>AgenticDev<span style="color:var(--fosfor)">_</span></span>
     </a>
     <nav>
@@ -595,7 +620,7 @@
         Postgres, Forgejo, MinIO, Caddy, the control plane and daily backups.</span>
     </p>
 
-    <div class="term scanlines" style="margin-top:26px">
+    <div class="term term-static scanlines" style="margin-top:26px">
       <div class="term-head">
         <i class="r"></i><i class="y"></i><i class="g"></i>
         <span>root@vps</span>
@@ -654,7 +679,7 @@
 
   <footer>
     <div class="wrap">
-      <span class="fbrand"><span class="mark">◆</span>AgenticDev<span style="color:var(--fosfor)">_</span></span>
+      <span class="fbrand"><svg class="mark" viewBox="0 0 22 22" aria-hidden="true"><rect width="22" height="22" rx="4" fill="var(--fosfor)"/><path d="M11 5.6 16.4 11 11 16.4 5.6 11z" fill="#0a0f0a"/></svg>AgenticDev<span style="color:var(--fosfor)">_</span></span>
       <a href="https://github.com/Praut-Startup-Support/AgenticDev">GitHub</a>
       <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE">
         <span class="cs">Licence</span><span class="en">Licence</span></a>
@@ -767,9 +792,9 @@
         i++;
         p.textContent = text.slice(0, i);
         if (i < text.length) {
-          setTimeout(step, 14);
+          setTimeout(step, 7);
         } else {
-          setTimeout(() => { line++; typeLine(); }, 420);
+          setTimeout(() => { line++; typeLine(); }, 190);
         }
       })();
     }
@@ -959,12 +984,15 @@
       uniform sampler2D uState;
       void main(){
         float v = texture(uState, vUv).g;
-        vec3 bg = vec3(0.02,0.024,0.016);
-        vec3 mid = vec3(0.03,0.06,0.09);
+        vec3 bg = vec3(0.019,0.023,0.016);
         vec3 edge = vec3(0.42,1.0,0.36);
-        float body = smoothstep(0.05,0.34,v);
-        float rim = smoothstep(0.14,0.30,v) * (1.0-smoothstep(0.30,0.46,v));
-        outColor = vec4(mix(bg, mid, body*0.26) + edge*rim*0.16, 1.0);
+        /* Výplň blobu byla šedomodrá a přebíjela zelený obrys — v pozadí
+           z toho byly šmouhy, které vypadaly jako artefakt komprese.
+           Teď se kreslí jen obrysy, dva různě široké: široký nese hloubku,
+           úzký ostrost. Vzniká z toho stopa na osciloskopu, ne skvrna. */
+        float wide = smoothstep(0.10,0.22,v) * (1.0-smoothstep(0.22,0.40,v));
+        float thin = smoothstep(0.19,0.235,v) * (1.0-smoothstep(0.235,0.29,v));
+        outColor = vec4(bg + edge*(wide*0.05 + thin*0.22), 1.0);
       }`;
     const INJECT_VS = `#version 300 es
       in vec2 aPos;
