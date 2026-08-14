@@ -77,9 +77,10 @@ askpw() { # askpw <proměnná> <otázka> <min-délka>
     return
   fi
   while :; do
-    read -rsp "  $__q (min $__min znaků): " __a </dev/tty; echo
+    read -rsp "  $__q (doporučeno min $__min znaků): " __a </dev/tty; echo
     if [[ ${#__a} -lt $__min ]]; then
-      printf "${YLW}    krátké — zkus znovu${OFF}\n"; continue
+      read -rp "${YLW}    kratší, než se doporučuje — trvat na tom? [a/N] ${OFF}" __ok </dev/tty
+      [[ "$__ok" =~ ^[aAyY]$ ]] || continue
     fi
     read -rsp "  ještě jednou: " __b </dev/tty; echo
     [[ "$__a" == "$__b" ]] && break
@@ -192,6 +193,16 @@ else
   info "Doménu nech prázdnou, jestli VPS nemá veřejné DNS."
   info "Platforma pak pojede jen po tailnetu."
   ask DOMAIN "Doména platformy (Enter = jen tailnet)" ""
+  if [[ "$DOMAIN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    # Let's Encrypt nevydá certifikát na holou IP adresu, ať už do compose
+    # napíšeš cokoli — CA k tomu potřebuje jméno. sslip.io je veřejná DNS
+    # služba zdarma: <ip>.sslip.io se přeloží zpátky přesně na <ip>, nic se
+    # nekupuje ani neregistruje. Adresa, kterou jsi zadal, zůstává funkční
+    # cesta k tomuhle VPS — jen dostane jméno, které certifikát unese.
+    RAW_IP="$DOMAIN"; DOMAIN="$RAW_IP.sslip.io"
+    warn "$RAW_IP je IP adresa — na tu certifikát nejde vydat"
+    info "beru $DOMAIN — sslip.io ji jen přeloží zpátky na $RAW_IP, nic víc"
+  fi
   # Kdo instaluje, se musí podepsat. Není to formalita: z tohohle jména
   # vzniká `principal`, a bez něj má auditní stopa u všeho, co se odklikne
   # v panelu, prázdného aktéra — tedy nevíš, kdo co schválil.
@@ -209,23 +220,14 @@ else
   askpw ADMIN_PW  "Heslo do admin panelu" 12
   askpw ENROLL_PW "Heslo pro připojení strojů" 10
 
-  echo
-  info "Dodavatel modelů — nastavuje DEFAULT_MODEL i egress allowlist."
-  info "  1) OpenAI-kompatibilní  (OpenAI, OpenRouter, Groq, vLLM…)"
-  info "  2) Anthropic"
-  info "  3) lokálně přes Ollama  (bez cloudu, bez klíče)"
-  ask PROVIDER "Volba" "1"
-  case "$PROVIDER" in
-    2) MODEL_BACKEND=anthropic; MODEL_BASE_URL=https://api.anthropic.com/v1
-       DEFAULT_MODEL=claude-sonnet-5; PROV_HOST=api.anthropic.com ;;
-    3) MODEL_BACKEND=ollama;    MODEL_BASE_URL=http://host.docker.internal:11434
-       DEFAULT_MODEL=local/qwen2.5-coder:32b; PROV_HOST="" ;;
-    *) MODEL_BACKEND=openai;    MODEL_BASE_URL=https://api.openai.com/v1
-       DEFAULT_MODEL=gpt-5.5;   PROV_HOST=api.openai.com ;;
-  esac
-  if [[ -n "$PROV_HOST" ]]; then
-    asks MODEL_KEY "API klíč (Enter = doplním potom do .env)"
-  fi
+  # Dodavatel modelů, API klíč, DEFAULT_MODEL i EGRESS_ALLOWLIST jsou
+  # DB-backed nastavení (viz control-plane/app/settings.py EDITABLE) —
+  # panel je mění za běhu, bez restartu. Ptát se na to teď, uprostřed
+  # instalace, kdy člověk často nemá klíč po ruce, je zbytečná zábrana
+  # navíc. Necháme rozumný výchozí stav a dotaz přesuneme tam, kde se dá
+  # kdykoli beztrestně změnit: Nastavení → Modely v panelu.
+  MODEL_BACKEND=openai; MODEL_BASE_URL=https://api.openai.com/v1
+  DEFAULT_MODEL=gpt-5.5; MODEL_KEY=""
 
   ask SMTP_HOST "SMTP host (Enter = přeskočit maily)" ""
   if [[ -n "${SMTP_HOST:-}" ]]; then
@@ -864,8 +866,8 @@ cat <<EOF
   Obsluha:             agenticdev-ctl status | logs | mac | backup-now${OFF}
 
 EOF
-[[ -z "${MODEL_API_KEY:-}" ]] && \
-  warn "MODEL_API_KEY je prázdný — doplň ho do $ENVF a pusť: agenticdev-ctl restart control-plane"
+[[ -z "${MODEL_KEY:-}" ]] && \
+  warn "dodavatele modelu a API klíč zatím nemáš — nastav je v panelu: Nastavení → Modely (platí okamžitě, bez restartu)"
 [[ "$AGENTICDEV_MODE" == "tailnet" ]] && \
   info "Bez domény jede platforma jen po tailnetu. Doménu doplníš do $ENVF (AGENTICDEV_DOMAIN, AGENTICDEV_MODE=public) a pustíš 'agenticdev-ctl up'."
 
