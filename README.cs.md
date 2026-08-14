@@ -80,7 +80,7 @@ Instalátor obojí zkontroluje a řekne ti, co chybí.
 **i podpis cosign**, a teprve pak ho spustí:
 
 ```bash
-ssh root@tvuj-server 'bash <(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'
+ssh -t root@tvuj-server 'bash <(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'
 ```
 
 Zeptá se na sedm věcí — doména, tvoje jméno a e-mail jako správce instance,
@@ -96,7 +96,7 @@ curl -fLO https://github.com/Praut-Startup-Support/AgenticDev/releases/latest/do
 sha256sum -c agenticdev-install-vps.sh.sha256
 
 scp agenticdev-install-vps.sh root@tvuj-server:/root/
-ssh root@tvuj-server 'bash /root/agenticdev-install-vps.sh'
+ssh -t root@tvuj-server 'bash /root/agenticdev-install-vps.sh'
 ```
 
 Ten artefakt sám přes rouru pustit nejde a odmítá to schválně — musí si

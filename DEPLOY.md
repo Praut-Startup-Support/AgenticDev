@@ -62,7 +62,7 @@ curl -fLO https://github.com/Praut-Startup-Support/AgenticDev/releases/latest/do
 sha256sum -c agenticdev-install-vps.sh.sha256
 
 scp agenticdev-install-vps.sh root@<vps>:/root/
-ssh root@<vps> 'bash /root/agenticdev-install-vps.sh'
+ssh -t root@<vps> 'bash /root/agenticdev-install-vps.sh'
 ```
 
 Nebo z repozitáře: `make dist` vyrobí ten samý soubor a `make check-dist`

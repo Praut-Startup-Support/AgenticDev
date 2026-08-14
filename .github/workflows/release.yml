@@ -118,7 +118,7 @@ jobs:
             sha256sum -c agenticdev-install-vps.sh.sha256
 
             scp agenticdev-install-vps.sh root@your-vps:/root/
-            ssh root@your-vps 'bash /root/agenticdev-install-vps.sh'
+            ssh -t root@your-vps 'bash /root/agenticdev-install-vps.sh'
             ```
 
             `sha256: ${{ env.sha256 }}`

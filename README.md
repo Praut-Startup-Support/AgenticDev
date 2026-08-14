@@ -119,7 +119,7 @@ Then install. The bootstrap downloads the release artifact, verifies its
 checksum **and its cosign signature**, and only then runs it:
 
 ```bash
-ssh root@your-vps 'bash <(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'
+ssh -t root@your-vps 'bash <(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'
 ```
 
 The installer asks seven questions — domain, your name and email as the
@@ -137,7 +137,7 @@ curl -fLO https://github.com/Praut-Startup-Support/AgenticDev/releases/latest/do
 sha256sum -c agenticdev-install-vps.sh.sha256
 
 scp agenticdev-install-vps.sh root@your-vps:/root/
-ssh root@your-vps 'bash /root/agenticdev-install-vps.sh'
+ssh -t root@your-vps 'bash /root/agenticdev-install-vps.sh'
 ```
 
 The artifact itself refuses to run from a pipe on purpose — it has to unpack

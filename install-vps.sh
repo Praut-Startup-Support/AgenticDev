@@ -5,7 +5,7 @@
 #  Jeden soubor. Nese v sobě celý repozitář platformy.
 #
 #      scp agenticdev-install-vps.sh root@<vps>:/root/
-#      ssh root@<vps> 'bash /root/agenticdev-install-vps.sh'
+#      ssh -t root@<vps> 'bash /root/agenticdev-install-vps.sh'
 #
 #  Po dokončení najdeš v /srv/agenticdev/out/ druhý instalátor —
 #  agenticdev-install-mac.sh — svázaný právě s tímhle VPS.
@@ -45,6 +45,17 @@ esac; done
 
 [[ -r "$SELF" ]] || die "Instalátor musí být SOUBOR na disku — přes 'curl | bash' se nerozbalí.
    Stáhni ho a spusť:  bash agenticdev-install-vps.sh"
+
+# Otázky níž čtou z /dev/tty. Přes 'ssh host cmd' bez -t se na vzdálené
+# straně nealoguje pseudoterminál, takže /dev/tty pro proces neexistuje —
+# open() spadne na ENXIO ("No such device or address") na první otázce.
+# Radši to řekneme rovnou, než ať to vypadá jako rozbitý instalátor.
+if (( ! MODE_CHECK && ! MODE_YES )) && ! { true </dev/tty; } 2>/dev/null; then
+  die "Bez terminálu se nedá odpovídat na otázky (chybí /dev/tty).
+   Přes ssh spouštěj s -t, ať se terminál navážou:
+     ssh -t root@<vps> 'bash /root/agenticdev-install-vps.sh'
+   Nebo běž neinteraktivně:  bash $SELF --yes  (hodnoty vezme z prostředí/.env)"
+fi
 
 ask() {  # ask <proměnná> <otázka> <default>
   local __v=$1 __q=$2 __d=${3:-} __r
