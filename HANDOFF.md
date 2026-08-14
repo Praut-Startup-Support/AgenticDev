@@ -141,6 +141,15 @@ tiše nechránit nic.
 (pod, harness, egress-proxy, directors, `.claude/settings.json`). Než něco
 napíšeš do README, ověř `grep`em, že to existuje.
 
+**Pre-release vydání se nepočítá do `latest`.** GitHub bere jako „latest"
+nejnovější vydání, které NENÍ pre-release. Když je celý projekt v alpha a
+všechna vydání se zaškrtnou jako pre-release, `releases/latest/download/…`
+vrací 404 — přestože vydání existují a jsou publikovaná. Přesně na tohle
+narazila instalace u v0.1.0. Buď vydávej bez toho zaškrtávátka (varování
+o alpha patří do textu vydání, ne do příznaku), nebo počítej s tím, že
+`install.sh` si nejnovější vydání dohledá přes API — má na to fallback,
+ale je to záchranná brzda, ne plán.
+
 **`BIND_ADDR` je ta nejostřejší hrana celého nasazení.** Na téhle adrese
 poslouchá Postgres, Forgejo a MinIO. `0.0.0.0` nebo veřejná adresa znamená
 ledger na internetu. Default je `${VPS_HOST}`, aby starší `.env` fungoval

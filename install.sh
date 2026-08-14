@@ -79,9 +79,45 @@ WORK=$(mktemp -d /root/agenticdev-boot.XXXXXX)
 # proces nahradí — trap se nespustí a stažený artefakt zůstane k ruce.
 trap 'rc=$?; (( rc != 0 )) && rm -rf "$WORK"; exit $rc' EXIT
 cd "$WORK"
-curl -fLsS -o "$ART" "$BASE/$ART" \
-  || die "Instalátor se nestáhl z $BASE/$ART
-     Zkontroluj, že vydání existuje: https://github.com/$REPO/releases"
+
+# `releases/latest` na GitHubu znamená „nejnovější vydání, které NENÍ
+# pre-release". U projektu, který je celý ve stavu alpha, tedy typicky
+# neznamená nic a vrací 404 — přestože vydání existují a jsou publikovaná.
+# Když se to stane, dohledáme nejnovější publikované vydání přes API,
+# pre-releases včetně, a jedeme s ním.
+if ! curl -fLsS -o "$ART" "$BASE/$ART" 2>/dev/null; then
+  if [[ "$TAG" == "latest" ]] && command -v python3 >/dev/null; then
+    warn "latest nic nevrátilo — hledám nejnovější vydání včetně pre-release"
+    FOUND=$(curl -fLsS "https://api.github.com/repos/$REPO/releases?per_page=20" 2>/dev/null \
+      | python3 -c "
+import json, sys
+try:
+    rel = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+# API vrací nejnovější první; drafty přeskočíme, ty stáhnout nejdou.
+for r in rel:
+    if not r.get('draft'):
+        print(r.get('tag_name', '')); break
+" 2>/dev/null || true)
+    if [[ -n "$FOUND" ]]; then
+      ok "beru $FOUND"
+      BASE="https://github.com/$REPO/releases/download/$FOUND"
+      TAG="$FOUND"
+      curl -fLsS -o "$ART" "$BASE/$ART" 2>/dev/null \
+        || die "Vydání $FOUND existuje, ale $ART v něm není.
+     Podívej se na https://github.com/$REPO/releases/tag/$FOUND"
+    else
+      die "Žádné publikované vydání jsem nenašel.
+     Buď žádné není, nebo zůstalo jako draft — draft se stáhnout nedá.
+     Zkontroluj: https://github.com/$REPO/releases"
+    fi
+  else
+    die "Instalátor se nestáhl z $BASE/$ART
+     Zkontroluj, že vydání existuje: https://github.com/$REPO/releases
+     Konkrétní verzi vynutíš: --tag v0.2.0"
+  fi
+fi
 curl -fLsS -o "$ART.sha256" "$BASE/$ART.sha256" \
   || die "Součet se nestáhl — bez něj se nedá ověřit, co jsem stáhl. Nespouštím."
 ok "$ART ($(wc -c <"$ART") B)"
