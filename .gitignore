@@ -10,3 +10,6 @@ data/
 
 # build artefakty / build artifacts
 dist/
+
+# Screenshoty z designové revize — pracovní materiál, ne součást webu.
+.screenshots/

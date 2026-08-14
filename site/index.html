@@ -3,477 +3,549 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AgenticDev — agenti pod kontrolou serveru</title>
-<meta name="description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server — ne notebook. Zdarma pro firmy do 1 M € obratu.">
+<title>AgenticDev — o tom, co agent smí, rozhoduje server</title>
+<meta name="description" content="Self-hosted platforma pro AI vývojové agenty. Co smí agent zapsat, vynucuje jádro podle fáze projektu. Jeden příkaz na instalaci, auditní stopa, kterou nejde přepsat. Zdarma do 1 M € obratu.">
+<meta name="theme-color" content="#050604">
 <link rel="icon" href="agenticdev.ico">
 <meta property="og:title" content="AgenticDev">
-<meta property="og:description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server — ne notebook.">
+<meta property="og:description" content="Self-hosted platforma pro AI vývojové agenty. Co smí agent zapsat, vynucuje jádro podle fáze projektu — ne instrukce.">
 <meta property="og:image" content="og.png">
 <meta property="og:type" content="website">
 <style>
   :root{
-    --bg:#0d0f14; --panel:#141821; --line:#242936; --line2:#333a4d;
-    --ink:#e9ecf1; --dim:#9299a8; --dim2:#6b7385;
-    --a1:#3B4EF0; --a2:#55178C; --soft:#7b89ff;
-    --ok:#3fb950; --warn:#d9a441;
-    --w:1080px;
+    --bg:#050604; --card:#0e130e; --card2:#161d16;
+    --line:rgba(226,240,226,.18); --line2:rgba(226,240,226,.26);
+    --ink:#edf3ec; --dim:#93a596; --dim2:#5e6d60;
+    --fosfor:#a3ff5c; --fosfor-dim:#7fd143; --yellow:#f0d64a; --deny:#ff5f56;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,sans-serif;
+    --w:1120px; --r:8px;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{
     margin:0; background:var(--bg); color:var(--ink);
-    font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,sans-serif;
-    -webkit-font-smoothing:antialiased;
+    font:16px/1.65 var(--sans); -webkit-font-smoothing:antialiased;
   }
   .en{display:none}
   body.lang-en .cs{display:none}
   body.lang-en .en{display:inline}
   body.lang-en div.en,body.lang-en p.en,body.lang-en ul.en,
   body.lang-en li.en,body.lang-en h1.en,body.lang-en h2.en,
-  body.lang-en h3.en,body.lang-en td.en,body.lang-en section.en,
-  body.lang-en pre.en{display:block}
+  body.lang-en h3.en,body.lang-en td.en,body.lang-en section.en{display:block}
   body.lang-en li.en{display:list-item}
-  /* Schéma je dvakrát celé, ne po částech: v jednom bloku by se zarovnání
-     rozsypalo, protože české a anglické popisky mají jinou délku. */
-  body:not(.lang-en) pre.en{display:none}
-  body.lang-en pre.cs{display:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
+  }
+
+  #rd, #dots{position:absolute; top:0; left:0; z-index:0; pointer-events:none}
+  #scrim{position:fixed; inset:0; z-index:0; pointer-events:none; background:rgba(3,4,3,.55)}
+  .site{position:relative; z-index:1}
 
   .wrap{max-width:var(--w); margin:0 auto; padding:0 24px}
+  .mono{font-family:var(--mono)}
+  .kicker{
+    font:600 12px/1 var(--mono); letter-spacing:.22em; text-transform:uppercase;
+    color:#c7d4c3; margin:0 0 12px;
+  }
+  .glow{color:var(--fosfor); text-shadow:0 0 13px rgba(163,255,92,.4), 0 0 3px rgba(163,255,92,.5)}
+  .glow-y{color:var(--yellow); text-shadow:0 0 13px rgba(240,214,74,.35)}
+  .box-glow{box-shadow:0 0 0 1px var(--fosfor), 0 0 18px -4px rgba(163,255,92,.35)}
 
-  /* ── hlavička ── */
+  .grid-bg{
+    background-image:linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+    mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  }
+  .scanlines{position:relative; overflow:hidden}
+  .scanlines::before{
+    content:""; position:absolute; inset:0; pointer-events:none; z-index:2; mix-blend-mode:multiply;
+    background:repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(0,0,0,.16) 3px, transparent 4px);
+  }
+  .cursor{animation:blink 1.1s steps(2,start) infinite; display:inline-block; width:7px; height:14px; background:var(--fosfor); margin-left:2px; transform:translateY(2px)}
+  @keyframes blink{to{visibility:hidden}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes rowIn{from{opacity:0; transform:translateY(-6px)}to{opacity:1; transform:translateY(0)}}
+
+  /* ── nav ── */
   header{
-    position:sticky; top:0; z-index:20; backdrop-filter:blur(12px);
-    background:rgba(13,15,20,.82); border-bottom:1px solid var(--line);
+    position:fixed; inset:0 0 auto 0; z-index:50; backdrop-filter:blur(12px);
+    background:rgba(10,15,10,.78); border-bottom:1px solid var(--line);
   }
-  header .wrap{display:flex; align-items:center; gap:20px; height:62px}
-  header img{height:24px}
+  header .wrap{display:flex; align-items:center; gap:18px; height:58px}
+  .brand{display:flex; align-items:center; gap:9px; font:700 14px/1 var(--mono); color:var(--ink); text-decoration:none}
+  .brand .mark{
+    display:grid; place-items:center; width:22px; height:22px; border-radius:4px;
+    background:var(--fosfor); color:#0a0f0a; font-size:12px;
+  }
   nav{margin-left:auto; display:flex; align-items:center; gap:22px}
-  nav a{color:var(--dim); text-decoration:none; font-size:14.5px}
-  nav a:hover{color:var(--ink)}
-  .lang{
-    border:1px solid var(--line2); border-radius:7px; overflow:hidden; display:flex;
+  .navlinks{display:flex; align-items:center; gap:22px}
+  .navlinks a{
+    font:600 12px/1 var(--mono); text-transform:uppercase; letter-spacing:.14em;
+    color:var(--dim); text-decoration:none;
   }
-  .lang button{
-    background:none; border:0; color:var(--dim2); padding:5px 10px;
-    font:inherit; font-size:12.5px; cursor:pointer;
-  }
-  .lang button.on{background:var(--a1); color:#fff}
+  .navlinks a:hover{color:var(--fosfor)}
+  .lang{border:1px solid var(--line2); border-radius:6px; overflow:hidden; display:flex}
+  .lang button{background:none; border:0; color:var(--dim2); padding:5px 10px; font:600 12px var(--mono); cursor:pointer}
+  .lang button.on{background:var(--fosfor); color:#0a0f0a}
   .btn{
-    display:inline-block; padding:11px 20px; border-radius:9px; font-weight:500;
-    text-decoration:none; font-size:15px; border:1px solid transparent;
+    display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:5px;
+    font:700 13px/1 var(--mono); text-transform:uppercase; letter-spacing:.08em;
+    text-decoration:none; border:1px solid transparent; cursor:pointer; white-space:nowrap;
   }
-  .btn.p{background:linear-gradient(135deg,var(--a1),var(--a2)); color:#fff}
-  .btn.p:hover{filter:brightness(1.12)}
-  .btn.s{border-color:var(--line2); color:var(--ink)}
-  .btn.s:hover{border-color:var(--soft)}
+  .btn.p{background:var(--fosfor); color:#0a0f0a}
+  .btn.p:hover{transform:translateY(-1px)}
+  .btn.s{border-color:var(--line2); color:var(--ink); background:transparent}
+  .btn.s:hover{border-color:var(--fosfor); color:var(--fosfor)}
+  .btn.deploy{border:1px solid rgba(163,255,92,.4); background:rgba(163,255,92,.08); color:var(--fosfor); padding:7px 14px; font-size:12px}
+  .btn.deploy:hover{background:var(--fosfor); color:#0a0f0a}
 
   /* ── hero ── */
-  .hero{padding:88px 0 72px; text-align:center}
-  .tag{
-    display:inline-flex; align-items:center; gap:8px; font-size:13px;
-    color:var(--warn); border:1px solid rgba(217,164,65,.3);
-    background:rgba(217,164,65,.07); padding:5px 13px; border-radius:99px;
-    margin-bottom:26px;
+  .hero{position:relative; overflow:hidden; padding:128px 0 72px}
+  .hero .grid-bg{position:absolute; inset:0; z-index:-1}
+  .hero-glow{position:absolute; inset:0 0 auto 0; z-index:-1; height:420px;
+    background:radial-gradient(ellipse 60% 50% at 50% -10%, rgba(163,255,92,.14), transparent);}
+  .hero-grid{display:grid; gap:48px; align-items:center; grid-template-columns:1.05fr .95fr}
+  @media(max-width:880px){.hero-grid{grid-template-columns:1fr}}
+
+  .badge{
+    display:inline-flex; align-items:center; gap:8px; font:600 11px/1 var(--mono); text-transform:uppercase;
+    letter-spacing:.18em; color:var(--dim); border:1px solid var(--line); border-radius:99px;
+    padding:6px 13px; margin-bottom:22px; background:rgba(255,255,255,.02);
   }
+  .badge .dot{width:6px; height:6px; border-radius:99px; background:var(--fosfor); animation:pulse 2s ease-in-out infinite}
   h1{
-    font-size:clamp(30px,5.2vw,50px); line-height:1.12; margin:0 0 22px;
-    letter-spacing:-1.4px; font-weight:600;
+    font:700 clamp(30px,5vw,50px)/1.1 var(--sans); letter-spacing:-1.2px; margin:0 0 20px;
   }
-  h1 .g{
-    background:linear-gradient(120deg,var(--soft),#b57bff);
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-  }
-  .lead{
-    font-size:clamp(16px,2vw,19px); color:var(--dim); max-width:640px;
-    margin:0 auto 34px;
-  }
-  .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap}
+  .lead{font-size:clamp(16px,1.7vw,18.5px); color:var(--dim); max-width:560px; margin:0 0 30px}
+  .cta{display:flex; gap:12px; flex-wrap:wrap}
+  .plats{margin-top:26px; display:flex; gap:22px; flex-wrap:wrap; font:600 12px var(--mono); color:var(--dim)}
+  .plats span{display:flex; align-items:center; gap:7px}
+  .plats b{color:var(--fosfor); font-weight:700}
 
-  /* ── sekce ── */
-  section{padding:76px 0; border-top:1px solid var(--line)}
-  h2{
-    font-size:clamp(23px,3.4vw,32px); letter-spacing:-.7px; margin:0 0 14px;
-    font-weight:600;
-  }
-  .sub{color:var(--dim); max-width:620px; margin:0 0 40px; font-size:16.5px}
+  /* ── terminal ── */
+  .term{border:1px solid var(--line); border-radius:10px; background:rgba(18,26,18,.85); overflow:hidden; box-shadow:0 30px 60px -30px rgba(0,0,0,.6)}
+  .term-head{display:flex; align-items:center; gap:8px; padding:11px 15px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02)}
+  .term-head i{width:10px; height:10px; border-radius:99px; display:block}
+  .term-head i.r{background:rgba(255,95,86,.7)} .term-head i.y{background:rgba(240,214,74,.7)} .term-head i.g{background:rgba(163,255,92,.7)}
+  .term-head span{margin-left:8px; font:600 11px var(--mono); color:var(--dim2); letter-spacing:.03em}
+  .term-body{min-height:266px; padding:16px; font:13px/1.7 var(--mono)}
+  .term-body p{margin:0}
+  .tin{color:var(--ink)} .tok{color:var(--fosfor)} .twarn{color:var(--yellow)} .tdeny{color:var(--deny)} .tmuted{color:var(--dim)}
 
-  .grid{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
-  .card{
-    background:var(--panel); border:1px solid var(--line); border-radius:13px;
-    padding:26px;
-  }
-  .card h3{margin:0 0 9px; font-size:16.5px; font-weight:600}
-  .card p{margin:0; color:var(--dim); font-size:14.7px; line-height:1.6}
-  .num{
-    font:600 12px/1 ui-monospace,monospace; color:var(--soft);
-    letter-spacing:1px; display:block; margin-bottom:13px;
-  }
+  /* ── sections ── */
+  section{padding:80px 0; border-top:1px solid var(--line); position:relative}
+  h2{font:700 clamp(23px,3.2vw,32px)/1.2 var(--sans); letter-spacing:-.6px; margin:0 0 14px; max-width:640px}
+  .sub{color:var(--dim); max-width:600px; margin:0 0 20px; font-size:16px; line-height:1.65}
 
-  /* ── schéma ── */
-  .box{
-    background:#0a0c11; border:1px solid var(--line); border-radius:13px;
-    padding:26px; overflow-x:auto;
-  }
-  pre{
-    margin:0; font:13.5px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;
-    color:#aeb6c7; white-space:pre;
-  }
-  pre b{color:var(--soft); font-weight:400}
-  pre i{color:var(--ok); font-style:normal}
+  /* how it works */
+  .steps{display:grid; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-top:44px}
+  @media(min-width:760px){.steps{grid-template-columns:repeat(3,1fr)}}
+  .step{background:var(--card); padding:28px; transition:background .2s}
+  .step:hover{background:var(--card2)}
+  .step .row1{display:flex; align-items:center; justify-content:space-between}
+  .step .n{font:700 34px var(--mono); color:var(--line2)}
+  .step:hover .n{color:rgba(163,255,92,.35)}
+  .step .tag{border:1px solid var(--line); border-radius:4px; padding:3px 8px; font:600 10px var(--mono); text-transform:uppercase; letter-spacing:.12em; color:var(--dim)}
+  .step h3{margin:20px 0 8px; font-size:17px}
+  .step p{margin:0; color:var(--dim); font-size:14px; line-height:1.6}
+  .step .bar{margin-top:20px; height:1px; background:var(--fosfor); transform:scaleX(0); transform-origin:left; transition:transform .4s}
+  .step:hover .bar{transform:scaleX(1)}
 
-  /* ── licence ── */
-  .price{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
-  .price .card{display:flex; flex-direction:column}
-  .price .card.hi{border-color:var(--soft)}
-  .amt{font-size:26px; font-weight:600; margin:6px 0 4px; letter-spacing:-.6px}
-  .price ul{list-style:none; padding:0; margin:16px 0 0; font-size:14.5px; color:var(--dim)}
+  .mounts{margin-top:24px; border:1px solid var(--line); border-radius:10px; background:#080c08; padding:20px; overflow-x:auto}
+  .mounts pre{margin:0; font:12.5px/1.75 var(--mono); color:#aeb6c7; white-space:pre}
+  .mounts b{color:var(--fosfor); font-weight:400}
+  .mounts i{color:var(--yellow); font-style:normal}
+  /* Byl to nejhůř čitelný prvek stránky: tři řádky šedé drobné sazby na
+     plnou šířku sloupce. Odsazení zleva zelenou linkou z toho dělá poznámku
+     pod čarou — přečte ji, kdo chce, a nikoho neunavuje cestou dolů. */
+  .trust{
+    color:var(--dim); font-size:13.5px; line-height:1.75; margin-top:22px;
+    max-width:660px; padding-left:16px; border-left:2px solid rgba(163,255,92,.28);
+  }
+  .trust b{color:var(--ink); font-weight:600}
+
+  /* permission gate */
+  .pg{margin-top:38px; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--card)}
+  .pg-tabs{display:flex; flex-wrap:wrap; gap:4px; padding:6px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02)}
+  .pg-tab{
+    flex:1 1 120px; text-align:left; border:0; border-radius:5px; padding:10px 12px; cursor:pointer;
+    background:transparent; color:var(--dim);
+  }
+  .pg-tab b{display:block; font:700 12px var(--mono); text-transform:uppercase; letter-spacing:.06em; color:inherit}
+  .pg-tab span{display:block; margin-top:2px; font-size:11px; color:inherit; opacity:.75}
+  .pg-tab.on{background:var(--fosfor); color:#0a0f0a}
+  .pg-tab:not(.on):hover{color:var(--ink)}
+  .pg-status{display:flex; justify-content:space-between; padding:12px 18px; border-bottom:1px solid var(--line); font:13px var(--mono); color:var(--dim)}
+  .pg-status b{color:var(--fosfor); font-weight:700}
+  .pg-grid{display:grid; gap:1px; background:var(--line)}
+  @media(min-width:640px){.pg-grid{grid-template-columns:1fr 1fr}}
+  @media(min-width:960px){.pg-grid{grid-template-columns:1fr 1fr 1fr}}
+  .pg-row{display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--card); padding:13px 16px}
+  .pg-cap{display:flex; align-items:center; gap:10px; font:13px var(--mono); color:var(--ink)}
+  .pg-cap .d{width:8px; height:8px; border-radius:99px; flex-shrink:0}
+  .pg-pill{border-radius:4px; border:1px solid; padding:2px 8px; font:700 10px var(--mono); letter-spacing:.1em}
+  .st-grant{color:var(--fosfor); border-color:rgba(163,255,92,.4); background:rgba(163,255,92,.1)}
+  .st-deny{color:var(--dim); border-color:var(--line); background:rgba(255,255,255,.03)}
+  .st-escalate{color:var(--yellow); border-color:rgba(240,214,74,.4); background:rgba(240,214,74,.1)}
+  .dot-grant{background:var(--fosfor)} .dot-deny{background:var(--dim2)} .dot-escalate{background:var(--yellow)}
+  /* Otázka, se kterou sem člověk přišel, zní „kam to smí zapsat". Odpověď
+     musí být vidět dřív, než začne číst. Zamítnuté cesty proto ustupují
+     celé — ne jen jejich štítek — a povolené drží zelenou hranu. */
+  .pg-row.is-deny .pg-cap{color:var(--dim2)}
+  .pg-row.is-grant{box-shadow:inset 2px 0 0 var(--fosfor)}
+  .pg-row.is-escalate{box-shadow:inset 2px 0 0 var(--yellow)}
+
+  /* ledger */
+  .ledger-wrap{display:grid; gap:48px; align-items:center; grid-template-columns:.9fr 1.1fr}
+  @media(max-width:880px){.ledger-wrap{grid-template-columns:1fr}}
+  .feat{list-style:none; margin:22px 0 0; padding:0; font:13.5px var(--mono); color:var(--dim)}
+  .feat li{display:flex; gap:10px; padding:5px 0}
+  .feat .ok{color:var(--fosfor)}
+  .ledger-panel{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--card); font-family:var(--mono)}
+  .ledger-head{display:flex; justify-content:space-between; align-items:center; padding:10px 15px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--dim)}
+  .ledger-head .live{display:flex; align-items:center; gap:7px}
+  .live .d{width:6px; height:6px; border-radius:99px; background:var(--fosfor); animation:pulse 2s ease-in-out infinite}
+  .ledger-row{display:flex; align-items:center; gap:12px; padding:11px 15px; border-top:1px solid var(--line); font-size:12.5px; animation:rowIn .35s ease}
+  .ledger-row:first-child{border-top:0}
+  .lg-id{width:52px; flex-shrink:0; color:var(--dim)}
+  .lg-actor{width:78px; flex-shrink:0; color:rgba(237,243,236,.8)}
+  .lg-action{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--dim)}
+  .lg-verdict{width:76px; flex-shrink:0; text-align:right; font-weight:700}
+  .v-GRANT{color:var(--fosfor)} .v-DENY{color:var(--deny)} .v-ESCALATE{color:var(--yellow)}
+  .lg-hash{width:96px; flex-shrink:0; text-align:right; color:var(--dim2)}
+  @media(max-width:600px){.lg-hash{display:none}}
+
+  /* platforms */
+  .plat-wrap{display:grid; gap:44px; grid-template-columns:1fr 1fr; align-items:center}
+  @media(max-width:880px){.plat-wrap{grid-template-columns:1fr}}
+  .stats{display:flex; align-items:center; gap:22px; margin-top:30px; font-family:var(--mono)}
+  .stats .n{font:700 26px var(--mono)}
+  .stats .l{font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin-top:2px}
+  .stats .div{width:1px; height:36px; background:var(--line)}
+  .plat-cards{display:grid; gap:14px; grid-template-columns:repeat(3,1fr)}
+  /* Dvě cesty připojení, ne tři platformy — mřížka na tři sloupce by z toho
+     dělala výčet, kde třetí položka chybí. */
+  .plat-cards-2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:600px){.plat-cards,.plat-cards-2{grid-template-columns:1fr}}
+  .plat-card{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:20px; transition:border-color .2s, transform .2s}
+  .plat-card:hover{border-color:rgba(163,255,92,.5); transform:translateY(-4px)}
+  .plat-glyph{width:34px; height:34px; display:grid; place-items:center; border:1px solid var(--line); border-radius:5px; font:13px var(--mono); color:var(--dim)}
+  .plat-card:hover .plat-glyph{border-color:rgba(163,255,92,.5); color:var(--fosfor)}
+  .plat-card .name{margin-top:30px; font:700 15px var(--mono)}
+  .plat-card .spec{margin-top:3px; font:12px var(--mono); color:var(--dim)}
+
+  /* licence */
+  .price{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); margin-top:36px}
+  .price .card{border:1px solid var(--line); border-radius:10px; background:var(--card); padding:26px; display:flex; flex-direction:column}
+  .price .card.hi{border-color:rgba(163,255,92,.5)}
+  .price h3{margin:0; font-size:16px}
+  .amt{font:700 26px var(--mono); margin:10px 0 4px; color:var(--fosfor)}
+  .price .card:not(.hi) .amt{color:var(--ink)}
+  .price ul{list-style:none; padding:0; margin:16px 0 0; font-size:14px; color:var(--dim)}
   .price li{padding:5px 0 5px 22px; position:relative}
-  .price li::before{content:"✓"; position:absolute; left:0; color:var(--ok)}
+  .price li::before{content:"✓"; position:absolute; left:0; color:var(--fosfor)}
+  .small{font-size:13.5px; color:var(--dim2)}
+  code{background:#080c08; border:1px solid var(--line); padding:1px 6px; border-radius:4px; font-size:13px; font-family:var(--mono)}
 
-  /* ── formulář ── */
-  .signup{
-    background:linear-gradient(135deg,rgba(59,78,240,.14),rgba(85,23,140,.14));
-    border:1px solid var(--line2); border-radius:16px; padding:44px 32px;
-    text-align:center;
-  }
-  form{max-width:460px; margin:26px auto 0}
+  /* signup / cta */
+  .cta-sec{overflow:hidden}
+  .cta-sec .grid-bg{position:absolute; inset:0 0 auto 0; height:420px; z-index:-1; opacity:.6}
+  .signup{text-align:center; max-width:540px; margin:0 auto}
+  form{max-width:440px; margin:24px auto 0}
   .row{display:flex; gap:9px; flex-wrap:wrap}
   input[type=email]{
-    flex:1; min-width:210px; padding:12px 15px; border-radius:9px; font:inherit;
-    font-size:15px; background:#0a0c11; border:1px solid var(--line2); color:var(--ink);
+    flex:1; min-width:200px; padding:12px 15px; border-radius:6px; font:14px var(--sans);
+    background:#080c08; border:1px solid var(--line2); color:var(--ink);
   }
-  input[type=email]:focus{outline:none; border-color:var(--soft)}
+  input[type=email]:focus{outline:none; border-color:var(--fosfor)}
   form button{
-    padding:12px 22px; border:0; border-radius:9px; cursor:pointer;
-    background:linear-gradient(135deg,var(--a1),var(--a2)); color:#fff;
-    font:inherit; font-size:15px; font-weight:500;
+    padding:12px 20px; border:0; border-radius:6px; cursor:pointer;
+    background:var(--fosfor); color:#0a0f0a; font:700 13px var(--mono); text-transform:uppercase; letter-spacing:.06em;
   }
-  form button:hover{filter:brightness(1.12)}
-  .consent{
-    display:flex; gap:9px; align-items:flex-start; margin-top:15px;
-    font-size:12.8px; color:var(--dim2); text-align:left; line-height:1.55;
-  }
-  .consent input{margin-top:3px; accent-color:var(--a1); flex-shrink:0}
+  form button:hover{filter:brightness(1.1)}
+  .consent{display:flex; gap:9px; align-items:flex-start; margin-top:16px; font-size:12.5px; color:var(--dim2); text-align:left; line-height:1.55}
+  .consent input{margin-top:3px; accent-color:var(--fosfor); flex-shrink:0}
   .consent a{color:var(--dim)}
-  .msg{margin-top:14px; font-size:14px; min-height:20px}
+  .msg{margin-top:14px; font-size:13.5px; min-height:20px; font-family:var(--mono)}
 
-  /* ── patička ── */
-  footer{border-top:1px solid var(--line); padding:40px 0; color:var(--dim2); font-size:13.5px}
-  footer .wrap{display:flex; gap:20px; flex-wrap:wrap; align-items:center}
+  footer{border-top:1px solid var(--line); padding:34px 0; color:var(--dim2); font-size:13px; font-family:var(--mono)}
+  footer .wrap{display:flex; gap:18px; flex-wrap:wrap; align-items:center}
+  footer .fbrand{display:flex; align-items:center; gap:8px; font-weight:700; color:var(--ink)}
+  footer .fbrand .mark{display:grid; place-items:center; width:18px; height:18px; border-radius:4px; background:var(--fosfor); color:#0a0f0a; font-size:10px}
   footer a{color:var(--dim); text-decoration:none}
-  footer a:hover{color:var(--ink)}
+  footer a:hover{color:var(--fosfor)}
   footer .sp{margin-left:auto}
-  .small{font-size:13.5px; color:var(--dim2)}
-  code{
-    background:#0a0c11; border:1px solid var(--line); padding:1px 6px;
-    border-radius:5px; font-size:13px;
-  }
-  @media(max-width:640px){
-    nav a.hide{display:none}
-    .hero{padding:56px 0 48px}
+
+  @media(max-width:880px){
+    .navlinks{display:none}
+    .hero{padding:100px 0 56px}
     section{padding:56px 0}
   }
 </style>
 </head>
 <body class="lang-cs">
 
+<canvas id="rd" aria-hidden="true"></canvas>
+<canvas id="dots" aria-hidden="true"></canvas>
+<div id="scrim" aria-hidden="true"></div>
+
+<div class="site">
+
 <header>
   <div class="wrap">
-    <a href="#"><img src="logo.svg" alt="AgenticDev"></a>
+    <a href="#top" class="brand">
+      <span class="mark">◆</span>
+      <span>AgenticDev<span style="color:var(--fosfor)">_</span></span>
+    </a>
     <nav>
-      <a href="#jak" class="hide"><span class="cs">Jak to funguje</span><span class="en">How it works</span></a>
-      <a href="#potreba" class="hide"><span class="cs">Co je potřeba</span><span class="en">Requirements</span></a>
-      <a href="#stav" class="hide"><span class="cs">Stav</span><span class="en">Status</span></a>
-      <a href="#licence" class="hide"><span class="cs">Licence</span><span class="en">Licence</span></a>
-      <a href="https://github.com/Praut-Startup-Support/AgenticDev">GitHub</a>
+      <div class="navlinks">
+        <a href="#jak"><span class="cs">Jak to funguje</span><span class="en">How it works</span></a>
+        <a href="#opravneni"><span class="cs">Oprávnění</span><span class="en">Permissions</span></a>
+        <a href="#ledger">Ledger</a>
+        <a href="#platformy"><span class="cs">Nasazení</span><span class="en">Deployment</span></a>
+        <a href="#instalace"><span class="cs">Instalace</span><span class="en">Install</span></a>
+        <a href="#licence"><span class="cs">Licence</span><span class="en">Licence</span></a>
+      </div>
       <div class="lang">
         <button data-l="cs" class="on">CS</button><button data-l="en">EN</button>
       </div>
+      <a href="#instalace" class="btn deploy mono">
+        <span class="cs">Nasadit</span><span class="en">Deploy</span> →
+      </a>
     </nav>
   </div>
 </header>
 
-<div class="wrap hero">
-  <div class="tag">
-    <span class="cs">Alfa — zdroják je veřejný, nasadit se dá dnes</span>
-    <span class="en">Alpha — source is public, you can deploy it today</span>
-  </div>
-  <h1>
-    <span class="cs">O tom, co agent smí,<br>rozhoduje <span class="g">server</span>. Ne notebook.</span>
-    <span class="en">The <span class="g">server</span> decides<br>what the agent may do. Not the laptop.</span>
-  </h1>
-  <p class="lead">
-    <span class="cs">Vlastní platforma pro AI vývojové agenty. Oprávnění plynou z fáze
-      projektu, agent běží v izolovaném kontejneru a každé rozhodnutí končí
-      v auditovatelné evidenci.</span>
-    <span class="en">Self-hosted platform for AI coding agents. Permissions come from the
-      project phase, the agent runs in an isolated container, and every decision
-      lands in an auditable ledger.</span>
-  </p>
-  <div class="cta">
-    <a href="https://github.com/Praut-Startup-Support/AgenticDev#install" class="btn p">
-      <span class="cs">Jak to nasadit</span><span class="en">How to deploy it</span></a>
-    <a href="https://github.com/Praut-Startup-Support/AgenticDev" class="btn s">
-      <span class="cs">Zdrojový kód</span><span class="en">Source code</span></a>
-  </div>
-  <p class="small" style="margin-top:22px">
-    <span class="cs">Server na jeden příkaz, stroje týmu přes odkaz s heslem.
-      Co ještě nefunguje, <a href="#stav" style="color:var(--soft)">píšeme níž</a>.</span>
-    <span class="en">One command for the server, a password-protected link for your
-      team's machines. What does not work yet is
-      <a href="#stav" style="color:var(--soft)">further down</a>.</span>
-  </p>
-</div>
+<section id="top" class="hero">
+  <div class="grid-bg"></div>
+  <div class="hero-glow"></div>
+  <div class="wrap hero-grid">
+    <div>
+      <div class="badge"><span class="dot"></span>
+        <span class="cs">v0.2.0 · alfa · self-hosted · jedna instance na firmu</span>
+        <span class="en">v0.2.0 · alpha · self-hosted · one instance per company</span>
+      </div>
+      <h1>
+        <span class="cs">O tom, co agent smí, rozhoduje <span class="glow">server</span>.<br>
+          <span style="color:var(--dim)">Ne notebook.</span></span>
+        <span class="en">The <span class="glow">server</span> decides what the agent may do.<br>
+          <span style="color:var(--dim)">Not the laptop.</span></span>
+      </h1>
+      <p class="lead">
+        <span class="cs">Vlastní platforma pro AI vývojové agenty. Co smí agent zapsat,
+          plyne z fáze projektu a vynucuje to jádro — ne instrukce. Agent běží
+          v jednorázovém kontejneru na tvém serveru a každé rozhodnutí končí
+          v auditovatelné evidenci, kterou nejde přepsat.</span>
+        <span class="en">Self-hosted platform for AI coding agents. What the agent may write
+          comes from the project phase and is enforced by the kernel — not by
+          instructions. The agent runs in a disposable container on your server, and
+          every decision lands in an audit trail that cannot be rewritten.</span>
+      </p>
+      <div class="cta">
+        <a href="#instalace" class="btn p box-glow">
+          <span class="cs">Nainstalovat</span><span class="en">Install it</span> →</a>
+        <a href="https://github.com/Praut-Startup-Support/AgenticDev" class="btn s">
+          <span class="cs">Zdrojový kód</span><span class="en">Source code</span></a>
+      </div>
+      <div class="plats">
+        <span><b>▪</b> <span class="cs">server: Debian 12 · Ubuntu 22.04 / 24.04</span><span class="en">server: Debian 12 · Ubuntu 22.04 / 24.04</span></span>
+        <span><b>▪</b> <span class="cs">lidé: macOS · Linux · Windows</span><span class="en">people: macOS · Linux · Windows</span></span>
+      </div>
+    </div>
 
-<section id="proc">
-  <div class="wrap">
-    <h2><span class="cs">Proč vůbec</span><span class="en">Why this exists</span></h2>
-    <p class="sub">
-      <span class="cs">Většina nástrojů posadí agenta na notebook vývojáře a doufá.
-        Tenhle to obrací.</span>
-      <span class="en">Most setups put the agent on the developer's laptop and hope
-        for the best. This one inverts that.</span>
-    </p>
-    <div class="grid">
-      <div class="card">
-        <span class="num">01</span>
-        <h3><span class="cs">Oprávnění z fáze, ne z osoby</span><span class="en">Permissions from the phase</span></h3>
-        <p><span class="cs">V průzkumné fázi nikdo nesahá na zdrojáky — ne proto, že to
-          zakazuje směrnice, ale protože je adresář připojený jen ke čtení.</span>
-          <span class="en">In discovery nobody touches source — not because a policy says
-          so, but because the directory is mounted read-only.</span></p>
+    <div class="term scanlines">
+      <div class="term-head">
+        <i class="r"></i><i class="y"></i><i class="g"></i>
+        <span>agenticdev@server · policy-engine</span>
       </div>
-      <div class="card">
-        <span class="num">02</span>
-        <h3><span class="cs">Agent v kleci</span><span class="en">The agent is fenced in</span></h3>
-        <p><span class="cs">Běží v kontejneru bez cesty do internetu. Ven se dostane jen
-          přes proxy, která pustí domény, které jsi vyjmenoval.</span>
-          <span class="en">It runs in a container with no route out. The only path is a
-          proxy that allows the domains you listed.</span></p>
-      </div>
-      <div class="card">
-        <span class="num">03</span>
-        <h3><span class="cs">Stopa, která zůstane</span><span class="en">A trail that stays</span></h3>
-        <p><span class="cs">Rozhodnutí, běhy i útrata padají do Postgresu na tvém serveru,
-          ne do něčí historie chatu. Auditní stopa je navíc jen přírůstková a
-          řetězená hashem — přepsat záznam zpětně databáze odmítne.</span>
-          <span class="en">Decisions, runs, and spend land in Postgres on your own server,
-          not in someone's chat history. The audit trail on top of that is
-          append-only and hash-chained — the database refuses to rewrite a record.</span></p>
-      </div>
-      <div class="card">
-        <span class="num">04</span>
-        <h3><span class="cs">Bez účtu u nás</span><span class="en">No account with us</span></h3>
-        <p><span class="cs">Jedna firma, jeden server, žádná centrální služba a žádná
-          telemetrie. Že sis to nainstaloval, se nedozvíme. Účet ale budeš
-          potřebovat u Tailscale — bez něj se platforma nedá bezpečně vystavit.</span>
-          <span class="en">One company, one server, no central service and no telemetry.
-          We never learn that you installed it. You will need a Tailscale account
-          though — without it the platform cannot be exposed safely.</span></p>
-      </div>
+      <div class="term-body" id="termBody"></div>
     </div>
   </div>
 </section>
 
 <section id="jak">
   <div class="wrap">
-    <h2><span class="cs">Jak vypadá izolace</span><span class="en">What the isolation looks like</span></h2>
-    <p class="sub">
-      <span class="cs">Hranici drží jádro operačního systému, ne slušnost agenta.</span>
-      <span class="en">The boundary is held by the kernel, not by the agent behaving.</span>
-    </p>
-    <div class="box"><pre class="cs">
-   <b>egress</b> ──── allowlist ────► <i>internet</i>
+    <p class="kicker">// <span class="cs">řídicí smyčka</span><span class="en">control loop</span></p>
+    <h2><span class="cs">Správa opouští notebook a stěhuje se na server.</span>
+      <span class="en">Governance moves off the endpoint and onto the server.</span></h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="row1"><span class="n">01</span><span class="tag">phase → scope</span></div>
+        <h3><span class="cs">Hranici drží mount, ne instrukce</span><span class="en">The boundary is a mount, not a rule</span></h3>
+        <p><span class="cs">Server pošle podle fáze seznam cest. Repozitář se připojí
+          read-only a přemountují se jen ty cesty. Zápis jinam selže na
+          <b>EROFS</b> — na jádře, ne na tom, že si to agent ohlídá.</span>
+          <span class="en">The server sends the paths for the current phase. The repository
+          mounts read-only and only those paths are remounted writable. A write anywhere
+          else fails with <b>EROFS</b> — at the kernel, not because the agent behaved.</span></p>
+        <div class="bar"></div>
+      </div>
+      <div class="step">
+        <div class="row1"><span class="n">02</span><span class="tag">spawn → destroy</span></div>
+        <h3><span class="cs">Pod běží na serveru, ne u lidí</span><span class="en">The pod runs on the server</span></h3>
+        <p><span class="cs">Kontejner startuje na tvém VPS, ne na notebooku. Po skončení se
+          zbourá i s tajemstvími na tmpfs. Na strojích lidí nepřistane Docker
+          ani klíč k repozitáři — jen ikona.</span>
+          <span class="en">The container starts on your VPS, not on a laptop. When it ends
+          it is torn down along with the secrets on tmpfs. Nothing heavy lands on
+          anyone's machine — no Docker, no repository credentials, just an icon.</span></p>
+        <div class="bar"></div>
+      </div>
+      <div class="step">
+        <div class="row1"><span class="n">03</span><span class="tag">append → seal</span></div>
+        <h3><span class="cs">Evidenci nejde přepsat</span><span class="en">The ledger cannot be rewritten</span></h3>
+        <p><span class="cs">Každá událost se zřetězí hashem s předchozí. Databáze na té
+          tabulce odmítne <b>UPDATE</b>, <b>DELETE</b> i <b>TRUNCATE</b> — není to
+          slib v dokumentaci, je to trigger v Postgresu.</span>
+          <span class="en">Each event is hash-chained to the one before it. The database
+          refuses <b>UPDATE</b>, <b>DELETE</b> and <b>TRUNCATE</b> on that table — not a
+          promise in the docs, a trigger in Postgres.</span></p>
+        <div class="bar"></div>
+      </div>
+    </div>
+
+    <div class="mounts">
+      <pre>   <b>egress</b> ──── allowlist ────► <i>internet</i>
       ▲
-      │  jediná cesta ven
+      │  <span class="cs">jediná cesta ven</span><span class="en">the only way out</span>
       │
-    <b>pod</b> ── bez routy ven · non-root · žádný docker socket
+    <b>pod</b> ── <span class="cs">bez routy ven · non-root · žádný docker socket</span><span class="en">no route out · non-root · no docker socket</span>
       │
-      ├── <b>/workspace</b>        repozitář read-only, scope cesty rw
-      ├── <b>/ctx</b>              kontext ze serveru, read-only
-      └── <b>/run/agenticdev</b>   token a policy na tmpfs, po skončení nic</pre><pre class="en">
-   <b>egress</b> ──── allowlist ────► <i>internet</i>
-      ▲
-      │  the only way out
-      │
-    <b>pod</b> ── no route out · non-root · no docker socket
-      │
-      ├── <b>/workspace</b>        repo read-only, scope paths rw
-      ├── <b>/ctx</b>              context from the server, read-only
-      └── <b>/run/agenticdev</b>   token and policy on tmpfs, gone on teardown</pre>
+      ├── <b>/workspace</b>   <span class="cs">repozitář read-only, scope cesty rw</span><span class="en">repository read-only, scoped path rw</span>
+      ├── <b>/ctx</b>         <span class="cs">kontext ze serveru, read-only</span><span class="en">context from the server, read-only</span>
+      └── <b>/run/agenticdev</b>   <span class="cs">token a policy na tmpfs, po skončení nic</span><span class="en">token and policy on tmpfs, nothing after</span></pre>
     </div>
-    <p class="small" style="margin-top:20px">
-      <span class="cs">Git po síti dělá hostitel — agent nikdy nedrží přihlašovací údaje
-        k repozitáři. Zápis mimo povolený rozsah skončí chybou souborového systému.
-        Harness navíc odmítne pod spustit, když je kořen workspace zapisovatelný nebo
-        chybí proxy: špatně nastavená izolace má spadnout nahlas, ne tiše nechránit nic.</span>
-      <span class="en">Network git operations stay on the host — the agent never holds
-        credentials to your repository. A write outside scope fails at the filesystem.
-        The harness also refuses to start the pod if the workspace root turns out to be
-        writable or the proxy is missing: a misconfigured sandbox should fail loudly,
-        not quietly protect nothing.</span>
-    </p>
-    <p class="small" style="margin-top:14px">
-      <span class="cs">Z internetu je vidět jedna jediná cesta — registrační stránka,
-        publikovaná přes Tailscale Funnel. Panel, git ani API veřejný port nemají.
-        Heslo je na té stránce jediná zábrana, takže má omezený počet pokusů na
-        adresu i celkem a po pěti neúspěších adresu na hodinu zamkne.</span>
-      <span class="en">Exactly one path is reachable from the internet — the enrollment
-        page, published through Tailscale Funnel. The panel, git, and the API have no
-        public port. The password is the only gate on that page, so attempts are
-        limited per address and globally, and five failures lock an address out for
-        an hour.</span>
+    <p class="trust">
+      <span class="cs">Git po síti dělá hostitel — agent commituje lokálně a nikdy nedrží
+        přihlašovací údaje k repozitáři. Větev odešle a pull request otevře server, až
+        pod skončí. A hotovo neodklikne agent: je to smergovaný PR se zeleným
+        workflow, které pustil někdo jiný než ten, kdo psal kód.</span>
+      <span class="en">Network git stays on the host — the agent commits locally and never
+        holds credentials to your repository. The server pushes the branch and opens the
+        pull request after the pod exits. And the agent does not get to declare itself
+        done: done is a merged PR with a green workflow, run by something other than
+        whoever wrote the code.</span>
     </p>
   </div>
 </section>
 
-<section id="komu">
+<section id="opravneni">
   <div class="wrap">
-    <h2><span class="cs">Pro koho to je</span><span class="en">Who it is for</span></h2>
-    <div class="grid">
-      <div class="card">
-        <h3><span class="cs">Malá softwarová firma</span><span class="en">Small software company</span></h3>
-        <p><span class="cs">Tři až dvacet lidí, práce pro klienty, potřeba vědět, kdo na
-          čem dělal a proč se to rozhodlo takhle.</span>
-          <span class="en">Three to twenty people, client work, and a need to know who
-          did what and why it was decided that way.</span></p>
-      </div>
-      <div class="card">
-        <h3><span class="cs">Citlivá data</span><span class="en">Sensitive data</span></h3>
-        <p><span class="cs">Projekt označíš jako chráněný a cloudové modely se pro něj
-          tvrdě zakážou. Ne varováním — zákazem.</span>
-          <span class="en">Mark a project restricted and cloud models are hard-blocked
-          for it. Not a warning — a refusal.</span></p>
-      </div>
-      <div class="card">
-        <h3><span class="cs">Kdo nechce cizí SaaS</span><span class="en">No third-party SaaS</span></h3>
-        <p><span class="cs">Kód klientů zůstává na tvém serveru a na strojích týmu.
-          U nás se neregistruješ a nic nám neposíláš. Ven jde jen to, co si
-          pustíš sám — model a domény, které vyjmenuješ.</span>
-          <span class="en">Client code stays on your server and your team's machines.
-          You never register with us and send us nothing. The only things that
-          leave are the ones you allow — your model and the domains you list.</span></p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="potreba">
-  <div class="wrap">
-    <h2><span class="cs">Co k tomu potřebuješ</span><span class="en">What you need</span></h2>
+    <p class="kicker">// <span class="cs">interaktivní politika</span><span class="en">interactive policy</span></p>
+    <h2><span class="cs">Přepni fázi. Sleduj, jak se mění to, kam jde zapsat.</span>
+      <span class="en">Switch the phase. Watch what becomes writable.</span></h2>
     <p class="sub">
-      <span class="cs">Nic exotického, ale Tailscale není volitelný — platforma se
-        po veřejné síti nevystavuje.</span>
-      <span class="en">Nothing exotic, but Tailscale is not optional — the platform
-        does not expose itself on the public network.</span>
+      <span class="cs">Oprávnění nejsou konfigurák na něčím notebooku. Plynou z fáze, ve
+        které projekt je, a mění se přepnutím fáze v panelu — ne úpravou uživatele.
+        Tahle tabulka je opsaná ze <code>scope</code> souborů v repozitáři, ne
+        vymyšlená pro web.</span>
+      <span class="en">Permissions are not a config file on someone's laptop. They come
+        from the phase the project is in, and change by switching the phase in the
+        panel — not by editing a user. This table is copied from the <code>scope</code>
+        files in the repository, not invented for the website.</span>
     </p>
-    <div class="grid">
-      <div class="card">
-        <h3><span class="cs">Server</span><span class="en">Server</span></h3>
-        <p><span class="cs">VPS s Debianem 12 nebo Ubuntu 22.04/24.04 a root. Paměť
-          podle týmu: základ ~2,5 GB a ~1,5 GB na každého, kdo pracuje zároveň —
-          agenti běží tady. Zbytek si nastaví instalátor sám.</span>
-          <span class="en">A VPS running Debian 12 or Ubuntu 22.04/24.04, and root.
-          Memory scales with the team: ~2.5 GB for the stack plus ~1.5 GB per
-          person working at the same time — the agents run here. The installer
-          sets up the rest.</span></p>
+
+    <div class="pg">
+      <div class="pg-tabs" id="pgTabs">
+        <button class="pg-tab" data-phase="discovery"><b>discovery</b><span><span class="cs">zjišťuje, co se má postavit</span><span class="en">works out what to build</span></span></button>
+        <button class="pg-tab" data-phase="design"><b>design</b><span><span class="cs">rozhoduje, jak se to postaví</span><span class="en">decides how it gets built</span></span></button>
+        <button class="pg-tab" data-phase="implementation"><b>implementation</b><span><span class="cs">píše kód a testy</span><span class="en">writes code and tests</span></span></button>
+        <button class="pg-tab" data-phase="hardening"><b>hardening</b><span><span class="cs">bezpečnost, výkon, provoz</span><span class="en">security, performance, ops</span></span></button>
+        <button class="pg-tab" data-phase="delivery"><b>delivery</b><span><span class="cs">dokumentace a vydání</span><span class="en">docs and release</span></span></button>
+        <button class="pg-tab" data-phase="support"><b>support</b><span><span class="cs">provoz a opravy</span><span class="en">operations and fixes</span></span></button>
       </div>
-      <div class="card">
-        <h3><span class="cs">Tailscale</span><span class="en">Tailscale</span></h3>
-        <p><span class="cs">Účet a zapnuté HTTPS certifikáty. Server ani databáze
-          nemají veřejný port — všechno kromě registrace jde po tailnetu.</span>
-          <span class="en">An account with HTTPS certificates enabled. Neither the server
-          nor the database has a public port — everything except enrollment goes
-          over the tailnet.</span></p>
+      <div class="pg-status">
+        <span><span class="cs">fáze</span><span class="en">phase</span> <b id="pgPhase">implementation</b> <span class="cs">→ scope vyřešen</span><span class="en">→ scope resolved</span></span>
+        <span><b id="pgCount">3</b>/9 <span class="cs">zapisovatelných cest</span><span class="en">writable paths</span></span>
       </div>
-      <div class="card">
-        <h3><span class="cs">Stroje týmu</span><span class="en">Team machines</span></h3>
-        <p><span class="cs">macOS, Linux nebo Windows. Stačí Tailscale a ikona na
-          plochu — agent běží na serveru, takže na notebooku není Docker ani
-          nic dalšího potřeba.</span>
-          <span class="en">macOS, Linux, or Windows. Tailscale and a desktop icon
-          are enough — the agent runs on the server, so no Docker and nothing
-          else is needed on the laptop.</span></p>
-      </div>
-      <div class="card">
-        <h3><span class="cs">Model</span><span class="en">A model</span></h3>
-        <p><span class="cs">Každý se přihlásí svým předplatným nebo klíčem, jednou.
-          Útrata tak sedí tomu, kdo ji spotřeboval. U projektů s citlivými daty se
-          cloud tvrdě zakáže a je potřeba lokální model.</span>
-          <span class="en">Each person signs in with their own subscription or key,
-          once, so spend lands on whoever incurred it. For projects marked
-          sensitive the cloud is hard-blocked and a local model is required.</span></p>
-      </div>
+      <div class="pg-grid" id="pgGrid"></div>
     </div>
   </div>
 </section>
 
-<section id="stav">
-  <div class="wrap">
-    <h2><span class="cs">Co ještě nefunguje</span><span class="en">What does not work yet</span></h2>
-    <p class="sub">
-      <span class="cs">Je to alfa. Tohle nejsou překvapení, na která přijdeš týden po
-        nasazení — jsou to díry, o kterých víme.</span>
-      <span class="en">This is alpha. These are not surprises you find a week in —
-        they are holes we know about.</span>
-    </p>
-    <div class="grid">
-      <div class="card">
-        <h3><span class="cs">Testy si pouští agent sám</span><span class="en">The agent runs its own tests</span></h3>
-        <p><span class="cs">Mezi prací agenta a mergem není serverová brána. Pro malý
-          tým, který si věří, to stačí; jako záruka kvality ne.</span>
-          <span class="en">There is no server-side gate between the agent's work and a
-          merge. Fine for a small team that trusts itself; not a quality guarantee.</span></p>
+<section id="ledger">
+  <div class="wrap ledger-wrap">
+    <div>
+      <p class="kicker">// <span class="cs">jen přidávání</span><span class="en">append-only</span></p>
+      <h2><span class="cs">Každé rozhodnutí končí v auditovatelné evidenci.</span>
+        <span class="en">Every decision lands in an auditable ledger.</span></h2>
+      <p class="sub">
+        <span class="cs">Nic, co se na platformě stane, není mimo záznam. Přidělení úkolu,
+          každé kolo agenta, selhaná kontrola, brána čekající na člověka i merge —
+          všechno se zřetězí hashem s předchozí událostí a zůstane čitelné dlouho po
+          tom, co kontejner zmizí.</span>
+        <span class="en">Nothing that happens on the platform is off the record. Task
+          assignment, every agent round, a failed check, a gate waiting on a human, the
+          merge — each is hash-chained to the event before it and stays readable long
+          after the container is gone.</span>
+      </p>
+      <ul class="feat">
+        <li><span class="ok">✓</span><span class="cs">Databáze odmítne UPDATE, DELETE i TRUNCATE</span><span class="en">The database refuses UPDATE, DELETE and TRUNCATE</span></li>
+        <li><span class="ok">✓</span><span class="cs">Zřetězeno hashem — přepis je vidět</span><span class="en">Hash-chained — tampering shows</span></li>
+        <li><span class="ok">✓</span><span class="cs">U každého řádku kódu je vidět, ze které session vznikl</span><span class="en">Every line of code traces to the session that wrote it</span></li>
+      </ul>
+    </div>
+
+    <div class="ledger-panel" id="ledgerPanel">
+      <div class="ledger-head">
+        <span class="live"><span class="d"></span>ledger.stream — <span class="cs">živě</span><span class="en">live</span></span>
+        <span>seq #<span id="ledgerSeq">4824</span></span>
       </div>
-      <div class="card">
-        <h3><span class="cs">Agent pracuje bez stavového automatu</span><span class="en">No orchestration layer</span></h3>
-        <p><span class="cs">Orchestrační vrstva, která by řídila fáze úkolu, popsaná je,
-          ale v kódu není. Server rozdává práci a kontext, ne postup.</span>
-          <span class="en">The layer that would drive a task through its stages is
-          described but not implemented. The server hands out work and context,
-          not a procedure.</span></p>
+      <div id="ledgerRows"></div>
+    </div>
+  </div>
+</section>
+
+<section id="platformy">
+  <div class="wrap plat-wrap">
+    <div>
+      <p class="kicker">// <span class="cs">nasazení</span><span class="en">deployment</span></p>
+      <h2><span class="cs">Jedna instance na firmu. Na strojích lidí nezůstane nic.</span>
+        <span class="en">One instance per company. Nothing lands on anyone's machine.</span></h2>
+      <p class="sub">
+        <span class="cs">Agenti běží na tvém serveru, ne na notebocích. Na stroji člověka
+          je jen ikona, která otevře terminál na serveru — žádný Docker, žádný klíč
+          k repozitáři, nic k nastavování a nic k povolování. Nemáme centrální službu
+          a nikdy se nedozvíme, že jsi to nainstaloval.</span>
+        <span class="en">Agents run on your server, not on laptops. All that lands on a
+          person's machine is an icon that opens a terminal on the server — no Docker,
+          no repository credentials, nothing to configure and nothing to approve. There
+          is no central service, and we never learn that you installed it.</span>
+      </p>
+      <div class="stats">
+        <div><div class="n glow">1</div><div class="l"><span class="cs">instance na firmu</span><span class="en">instance per company</span></div></div>
+        <div class="div"></div>
+        <div><div class="n" style="color:var(--ink)">0</div><div class="l"><span class="cs">důvěry na notebooku</span><span class="en">trust on the laptop</span></div></div>
+        <div class="div"></div>
+        <div><div class="n glow-y">6</div><div class="l"><span class="cs">fází, každá s vlastním scope</span><span class="en">phases, each with its own scope</span></div></div>
       </div>
-      <div class="card">
-        <h3><span class="cs">Útrata je orientační</span><span class="en">Cost figures are indicative</span></h3>
-        <p><span class="cs">Tokeny se odhadují, ceny modelů nejsou ověřené. Číslo v
-          panelu ber jako ukazatel trendu, ne jako fakturu.</span>
-          <span class="en">Tokens are estimated and model prices are unverified. Treat
-          the number in the panel as a trend, not an invoice.</span></p>
-      </div>
-      <div class="card">
-        <h3><span class="cs">Kontejner není hypervizor</span><span class="en">A container is not a hypervisor</span></h3>
-        <p><span class="cs">Pod běží bez rootu, bez capabilit a bez docker socketu, ale
-          útěk z kontejneru neřešíme. Je to pevný plot, ne trezor.</span>
-          <span class="en">The pod runs non-root, with no capabilities and no Docker
-          socket, but container escape is out of scope. A strong fence, not a vault.</span></p>
-      </div>
-      <div class="card">
-        <h3><span class="cs">Heslo pro připojení nemá expiraci</span><span class="en">The join password never expires</span></h3>
-        <p><span class="cs">Je jedno pro celou instanci. Odvolat ho znamená změnit ho
-          všem — jednotlivý stroj ale odebereš z panelu kdykoli.</span>
-          <span class="en">It is one password for the whole instance. Revoking it means
-          changing it for everyone — though you can drop any single machine from
-          the panel at any time.</span></p>
-      </div>
-      <div class="card">
-        <h3><span class="cs">Chybí observabilita</span><span class="en">No observability stack</span></h3>
-        <p><span class="cs">Grafana a Loki jsou v compose zakomentované. Zatím platí
-          logy z Dockeru a auditní stopa v databázi.</span>
-          <span class="en">Grafana and Loki are commented out in the compose file. For
-          now it is Docker logs and the audit trail in the database.</span></p>
-      </div>
+    </div>
+
+    <div>
+    <p class="kicker" style="margin:0 0 12px"><span class="cs">// vyber si při instalaci</span><span class="en">// pick one at install time</span></p>
+    <div class="plat-cards plat-cards-2">
+      <div class="plat-card"><div class="plat-glyph">◆</div><div class="name"><span class="cs">Doména</span><span class="en">Domain</span></div><div class="spec"><span class="cs">vlastní doména, Let's Encrypt, žádná třetí strana</span><span class="en">your own domain, Let's Encrypt, no third party</span></div></div>
+      <div class="plat-card"><div class="plat-glyph">⊙</div><div class="name">Tailscale</div><div class="spec"><span class="cs">z internetu je vidět jen registrace</span><span class="en">only enrollment is reachable from outside</span></div></div>
+    </div>
     </div>
   </div>
 </section>
 
 <section id="licence">
   <div class="wrap">
+    <p class="kicker">// <span class="cs">licencování</span><span class="en">licensing</span></p>
     <h2><span class="cs">Licence</span><span class="en">Licensing</span></h2>
     <p class="sub">
-      <span class="cs">Zdroják je veřejný. Malé firmy zdarma, velké platí. Za čtyři roky
-        se každá verze sama uvolní jako Apache-2.0.</span>
-      <span class="en">The source is public. Small companies free, larger ones pay.
-        Every version converts to Apache-2.0 four years after release.</span>
+      <span class="cs">Zdroják je veřejný. Malé firmy zdarma, velké platí, a autor
+        zůstane uvedený. Za čtyři roky se každá verze sama uvolní jako Apache-2.0 —
+        takže to není past.</span>
+      <span class="en">The source is public. Small companies free, larger ones pay, and
+        the author stays credited. Every version converts to Apache-2.0 four years after
+        release — so it is not a trap.</span>
     </p>
     <div class="price">
       <div class="card hi">
@@ -483,7 +555,8 @@
         <ul>
           <li><span class="cs">Neomezeně strojů a projektů</span><span class="en">Unlimited machines and projects</span></li>
           <li><span class="cs">Celý zdrojový kód</span><span class="en">Full source code</span></li>
-          <li><span class="cs">Vyzkoušení, vývoj a učení vždy zdarma, bez ohledu na obrat</span><span class="en">Evaluation, dev and teaching always free, whatever your revenue</span></li>
+          <li><span class="cs">Vyzkoušení a vývoj vždy zdarma</span><span class="en">Evaluation and dev always free</span></li>
+          <li><span class="cs">Necháš v panelu uvedení „AgenticDev — © Praut s.r.o."</span><span class="en">You keep the “AgenticDev — © Praut s.r.o.” credit in the panel</span></li>
         </ul>
       </div>
       <div class="card">
@@ -499,112 +572,851 @@
     </div>
     <p class="small" style="margin-top:22px">
       <span class="cs">Business Source License 1.1. Není to open source podle definice OSI —
-        je to source-available. Jedno omezení platí i pro malé firmy: nabízet
-        AgenticDev třetím stranám jako hostovanou službu licence nedovoluje.
-        <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--soft)">Rozdíl vysvětlujeme tady</a>.</span>
+        je to source-available. <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--fosfor)">Rozdíl vysvětlujeme tady</a>.</span>
       <span class="en">Business Source License 1.1. Not OSI open source — source-available.
-        One limit applies regardless of size: the licence does not allow offering
-        AgenticDev to third parties as a hosted or managed service.
-        <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--soft)">We explain the difference here</a>.</span>
+        <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--fosfor)">We explain the difference here</a>.</span>
     </p>
   </div>
 </section>
 
-<section id="zajem">
+<section id="instalace">
   <div class="wrap">
-    <div class="signup">
-      <h2><span class="cs">Dáme vědět, až vyjde stabilní verze</span><span class="en">We will tell you when a stable release lands</span></h2>
-      <p class="sub" style="margin:0 auto; text-align:center">
-        <span class="cs">Zkusit to můžeš hned — zdroják je na GitHubu. Tohle je pro
-          případ, že chceš počkat, až díry výš zmizí. Jeden e-mail, nic dalšího.</span>
-        <span class="en">You can try it right now — the source is on GitHub. This is for
-          when you would rather wait until the holes above are gone. One email,
-          nothing else.</span>
-      </p>
+    <p class="kicker">// $ <span class="cs">jeden příkaz</span><span class="en">one command</span></p>
+    <h2><span class="cs">Jeden příkaz na čistém VPS.</span>
+      <span class="en">One command on a clean VPS.</span></h2>
+    <p class="sub">
+      <span class="cs">Stáhne vydaný instalátor, ověří jeho <b>sha256</b> i podpis
+        <b>cosign</b>, pustí jeho vlastní kontrolu — a teprve pak instaluje. Zeptá se na
+        sedm věcí a zbytek udělá sám: Docker, firewall, SSH, Postgres, Forgejo, MinIO,
+        Caddy, řídicí vrstvu a denní zálohy.</span>
+      <span class="en">It downloads the released installer, verifies its <b>sha256</b> and
+        its <b>cosign</b> signature, runs the installer's own self-check — and only then
+        installs. It asks seven questions and does the rest: Docker, firewall, SSH,
+        Postgres, Forgejo, MinIO, Caddy, the control plane and daily backups.</span>
+    </p>
 
-      <form id="f" action="https://formspree.io/f/xbgroknv" method="POST">
-        <div class="row">
-          <input type="email" name="email" required autocomplete="email"
-                 placeholder="jmeno@firma.cz">
-          <button type="submit"><span class="cs">Odebírat</span><span class="en">Notify me</span></button>
-        </div>
-        <label class="consent">
-          <input type="checkbox" name="souhlas" required>
-          <span>
-            <span class="cs">Souhlasím, aby Praut s.r.o. použil moji adresu k jedinému
-              účelu — oznámit vydání stabilní verze AgenticDev. Souhlas můžu kdykoli
-              odvolat na svanda@praut.cz a adresa bude smazána.</span>
-            <span class="en">I agree that Praut s.r.o. may use my address for one purpose —
-              to announce the stable AgenticDev release. I can withdraw consent any
-              time at svanda@praut.cz and the address will be deleted.</span>
-          </span>
-        </label>
-        <div class="msg" id="m"></div>
-      </form>
+    <div class="term scanlines" style="margin-top:26px">
+      <div class="term-head">
+        <i class="r"></i><i class="y"></i><i class="g"></i>
+        <span>root@vps</span>
+      </div>
+      <div class="term-body">
+        <p class="tin">ssh root@tvuj-vps 'bash &lt;(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'</p>
+        <p class="tok">✓ sha256 souhlasí</p>
+        <p class="tok">✓ podpis cosign souhlasí — vydal to Praut-Startup-Support</p>
+        <p class="tmuted">→ <span class="cs">na konci dostaneš dva odkazy: panel a odkaz pro tým</span><span class="en">at the end you get two links: the panel and one for your team</span></p>
+      </div>
     </div>
+
+    <p class="trust" style="margin-top:22px">
+      <span class="cs"><b>Stav je alfa a myslíme to vážně.</b> Sandbox neběžel proti
+        skutečnému Dockeru a doménový režim proti skutečné doméně. Než to nasadíš na
+        ostro, přečti si <a href="https://github.com/Praut-Startup-Support/AgenticDev#známá-omezení" style="color:var(--fosfor)">Známá omezení</a> — je to poctivý seznam, ne formalita.</span>
+      <span class="en"><b>Alpha, and we mean it.</b> The sandbox has not run against a real
+        Docker daemon, nor the domain mode against a real domain. Before you deploy this
+        for real, read <a href="https://github.com/Praut-Startup-Support/AgenticDev#known-limitations" style="color:var(--fosfor)">Known limitations</a> — it is an honest list, not a formality.</span>
+    </p>
   </div>
 </section>
 
-<footer>
-  <div class="wrap">
-    <span>© 2026 Praut s.r.o.</span>
-    <a href="https://github.com/Praut-Startup-Support/AgenticDev">GitHub</a>
-    <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE">
-      <span class="cs">Licence</span><span class="en">Licence</span></a>
-    <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/SECURITY.md">
-      <span class="cs">Bezpečnost</span><span class="en">Security</span></a>
-    <a href="mailto:svanda@praut.cz">svanda@praut.cz</a>
-    <span class="sp small">
-      <span class="cs">Adresy neprodáváme ani nepředáváme.</span>
-      <span class="en">We do not sell or share addresses.</span>
-    </span>
+<section id="zajem" class="cta-sec">
+  <div class="grid-bg"></div>
+  <div class="wrap signup">
+    <p class="kicker">// $ agenticdev subscribe</p>
+    <h2><span class="cs">Dáme vědět, až přestane být alfa</span><span class="en">We will tell you when it stops being alpha</span></h2>
+    <p class="sub" style="margin:0 auto">
+      <span class="cs">Jeden e-mail, až vyjde verze, kterou nasadíme sami u zákazníka.
+        Nic dalšího posílat nebudeme.</span>
+      <span class="en">One email when a release lands that we deploy at a client
+        ourselves. Nothing else.</span>
+    </p>
+
+    <form id="f" action="https://formspree.io/f/xbgroknv" method="POST">
+      <div class="row">
+        <input type="email" name="email" required autocomplete="email"
+               placeholder="jmeno@firma.cz">
+        <button type="submit"><span class="cs">Odebírat</span><span class="en">Notify me</span></button>
+      </div>
+      <label class="consent">
+        <input type="checkbox" name="souhlas" required>
+        <span>
+          <span class="cs">Souhlasím, aby Praut s.r.o. použil moji adresu k jedinému
+            účelu — oznámit vydání AgenticDev mimo alfu. Souhlas můžu kdykoli odvolat na
+            svanda@praut.cz a adresa bude smazána.</span>
+          <span class="en">I agree that Praut s.r.o. may use my address for one purpose —
+            to announce the AgenticDev release beyond alpha. I can withdraw consent any time at
+            svanda@praut.cz and the address will be deleted.</span>
+        </span>
+      </label>
+      <div class="msg" id="m"></div>
+    </form>
   </div>
-</footer>
+
+  <footer>
+    <div class="wrap">
+      <span class="fbrand"><span class="mark">◆</span>AgenticDev<span style="color:var(--fosfor)">_</span></span>
+      <a href="https://github.com/Praut-Startup-Support/AgenticDev">GitHub</a>
+      <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE">
+        <span class="cs">Licence</span><span class="en">Licence</span></a>
+      <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/SECURITY.md">
+        <span class="cs">Bezpečnost</span><span class="en">Security</span></a>
+      <a href="mailto:svanda@praut.cz">svanda@praut.cz</a>
+      <span class="sp">
+        <span class="cs">Adresy neprodáváme ani nepředáváme.</span>
+        <span class="en">We do not sell or share addresses.</span>
+      </span>
+    </div>
+  </footer>
+</section>
+
+</div>
 
 <script>
-  const body = document.body, msg = document.getElementById('m'), f = document.getElementById('f');
+  const body = document.body;
 
+  /* ── jazyk ── */
   function setLang(l){
     body.className = 'lang-' + l;
     document.documentElement.lang = l;
-    document.querySelectorAll('.lang button').forEach(b =>
-      b.classList.toggle('on', b.dataset.l === l));
+    document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.l === l));
     try { localStorage.setItem('lang', l); } catch(e) {}
+    startTerminal();
   }
-  document.querySelectorAll('.lang button').forEach(b =>
-    b.onclick = () => setLang(b.dataset.l));
+  document.querySelectorAll('.lang button').forEach(b => b.onclick = () => setLang(b.dataset.l));
+  function currentLang(){ return body.classList.contains('lang-en') ? 'en' : 'cs'; }
 
-  // Prohlížeč napoví, ale uložená volba má přednost.
   let l = null;
   try { l = localStorage.getItem('lang'); } catch(e) {}
   if (!l) l = (navigator.language || '').toLowerCase().startsWith('cs') ? 'cs' : 'en';
-  setLang(l);
+  body.className = 'lang-' + l;
+  document.documentElement.lang = l;
+  document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.l === l));
 
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── formulář ── */
+  const msg = document.getElementById('m'), f = document.getElementById('f');
   const T = {
     cs: { wait:'odesílám…', ok:'Hotovo. Ozveme se, až to vyjde.',
           err:'Nepovedlo se to. Zkus to znovu, nebo napiš na svanda@praut.cz.' },
     en: { wait:'sending…', ok:'Done. We will be in touch at launch.',
           err:'That did not work. Try again, or write to svanda@praut.cz.' }
   };
-
   f.onsubmit = async e => {
     e.preventDefault();
-    const t = T[body.classList.contains('lang-en') ? 'en' : 'cs'];
+    const t = T[currentLang()];
     msg.style.color = 'var(--dim)';
     msg.textContent = t.wait;
     try {
-      const r = await fetch(f.action, {
-        method: 'POST', body: new FormData(f), headers: { Accept: 'application/json' }
-      });
+      const r = await fetch(f.action, { method:'POST', body:new FormData(f), headers:{ Accept:'application/json' } });
       if (!r.ok) throw new Error();
-      msg.style.color = 'var(--ok)';
+      msg.style.color = 'var(--fosfor)';
       msg.textContent = t.ok;
       f.reset();
     } catch (err) {
-      msg.style.color = '#f85149';
+      msg.style.color = 'var(--deny)';
       msg.textContent = t.err;
     }
   };
+
+  /* ── hero terminál ── */
+  const SCRIPTS = {
+    cs: [
+      ['$ agenticdev work montexbau','tin'],
+      ['server: fáze implementation → scope src/** tests/**','tmuted'],
+      ['pod: repozitář ro, scope přemountován rw','tok'],
+      ['pod: egress přes proxy · 4 domény · zbytek deny','tok'],
+      ['$ agent zapisuje src/import/karty.ts','tin'],
+      ['POVOLENO  cesta je ve scope fáze','tok'],
+      ['$ agent zkouší prd/00-context.md','tin'],
+      ['EROFS  read-only file system','tdeny'],
+      ['ledger: 2 události · hash 0x7f3c…e12 · append-only','twarn'],
+    ],
+    en: [
+      ['$ agenticdev work montexbau','tin'],
+      ['server: phase implementation → scope src/** tests/**','tmuted'],
+      ['pod: repository ro, scope remounted rw','tok'],
+      ['pod: egress via proxy · 4 domains · everything else denied','tok'],
+      ['$ agent writes src/import/cards.ts','tin'],
+      ['GRANTED  path is inside the phase scope','tok'],
+      ['$ agent tries prd/00-context.md','tin'],
+      ['EROFS  read-only file system','tdeny'],
+      ['ledger: 2 events · hash 0x7f3c…e12 · append-only','twarn'],
+    ],
+  };
+  let termToken = 0;
+  function startTerminal(){
+    const myToken = ++termToken;
+    const el = document.getElementById('termBody');
+    const script = SCRIPTS[currentLang()];
+    el.innerHTML = '';
+    if (reduced) {
+      el.innerHTML = script.map(([t,c]) => `<p class="${c}">${t}</p>`).join('');
+      return;
+    }
+    let line = 0;
+    function typeLine(){
+      if (myToken !== termToken || line >= script.length) return;
+      const [text, cls] = script[line];
+      const p = document.createElement('p');
+      p.className = cls;
+      el.appendChild(p);
+      let i = 0;
+      (function step(){
+        if (myToken !== termToken) return;
+        i++;
+        p.textContent = text.slice(0, i);
+        if (i < text.length) {
+          setTimeout(step, 14);
+        } else {
+          setTimeout(() => { line++; typeLine(); }, 420);
+        }
+      })();
+    }
+    typeLine();
+  }
+  startTerminal();
+
+  /* ── brána oprávnění ── */
+  /* Tahle matice NENÍ ilustrace — je opsaná z workspace/_phase/<fáze>/scope
+     a z GATE_PATTERNS v pod/harness/director.py. Když se scope v repu změní,
+     musí se změnit i tady, jinak web slibuje něco jiného, než platforma dělá. */
+  const CAPS = ['prd/**','design/**','src/**','tests/**','infra/**','docs/**',
+                'prd/40-decisions/**','schema_migration','dependency_add'];
+  const G = 'grant', D = 'deny', E = 'escalate';
+  const MATRIX = {
+    discovery:      { 'prd/**':G,'design/**':D,'src/**':D,'tests/**':D,'infra/**':D,'docs/**':G,'prd/40-decisions/**':G,'schema_migration':D,'dependency_add':D },
+    design:         { 'prd/**':G,'design/**':G,'src/**':D,'tests/**':D,'infra/**':D,'docs/**':G,'prd/40-decisions/**':G,'schema_migration':D,'dependency_add':E },
+    implementation: { 'prd/**':D,'design/**':D,'src/**':G,'tests/**':G,'infra/**':D,'docs/**':D,'prd/40-decisions/**':G,'schema_migration':E,'dependency_add':E },
+    hardening:      { 'prd/**':D,'design/**':D,'src/**':G,'tests/**':G,'infra/**':G,'docs/**':D,'prd/40-decisions/**':G,'schema_migration':E,'dependency_add':E },
+    delivery:       { 'prd/**':D,'design/**':D,'src/**':D,'tests/**':D,'infra/**':D,'docs/**':G,'prd/40-decisions/**':D,'schema_migration':D,'dependency_add':D },
+    support:        { 'prd/**':D,'design/**':D,'src/**':G,'tests/**':G,'infra/**':D,'docs/**':G,'prd/40-decisions/**':G,'schema_migration':E,'dependency_add':E },
+  };
+  const STATUS_LABEL = {
+    grant: '<span class="cs">ZÁPIS</span><span class="en">WRITABLE</span>',
+    deny: '<span class="cs">EROFS</span><span class="en">EROFS</span>',
+    escalate: '<span class="cs">ČEKÁ NA ČLOVĚKA</span><span class="en">HUMAN GATE</span>',
+  };
+  let pgActive = 'implementation';
+  const pgTabs = document.getElementById('pgTabs');
+  const pgGrid = document.getElementById('pgGrid');
+  function renderPG(){
+    pgTabs.querySelectorAll('.pg-tab').forEach(b => b.classList.toggle('on', b.dataset.phase === pgActive));
+    document.getElementById('pgPhase').textContent = pgActive;
+    const current = MATRIX[pgActive];
+    const granted = Object.values(current).filter(s => s === 'grant').length;
+    document.getElementById('pgCount').textContent = granted;
+    // Pořadí zapisovatelné → čeká na člověka → zamítnuté. Abecedně by se
+    // odpověď rozsypala mezi devět řádků a oko by ji muselo hledat.
+    const RANK = { grant:0, escalate:1, deny:2 };
+    const sorted = CAPS.slice().sort((a, b) => RANK[current[a]] - RANK[current[b]]);
+    pgGrid.innerHTML = sorted.map(cap => {
+      const s = current[cap];
+      return `<div class="pg-row is-${s}"><span class="pg-cap"><span class="d dot-${s}"></span>${cap}</span>
+        <span class="pg-pill st-${s}">${STATUS_LABEL[s]}</span></div>`;
+    }).join('');
+  }
+  pgTabs.addEventListener('click', e => {
+    const b = e.target.closest('.pg-tab');
+    if (!b) return;
+    pgActive = b.dataset.phase;
+    renderPG();
+  });
+  renderPG();
+
+  /* ── evidence (ledger) ── */
+  /* Slovesa jsou ta, která platforma opravdu zapisuje — grep `_emit(` v
+     control-plane a `emit(policy,` v pod/harness/director.py. */
+  const actors = ['msvanda','jkolar','director','control-plane','msvanda'];
+  /* Akce a verdikt drží pohromadě. Losovat je zvlášť vyrábělo nesmysly typu
+     „gate_applied → BLOCKED"; vymyšlená data, která si odporují, berou
+     důvěryhodnost všemu ostatnímu na stránce. */
+  const EVENTS = [
+    ['task assigned','GRANT'], ['workspace_served','GRANT'],
+    ['phase_started plan','GRANT'], ['checks_passed','GRANT'],
+    ['pull_request_opened','GRANT'], ['gate_applied','GRANT'],
+    ['ssh_key_installed','GRANT'], ['checks_failed n=1','DENY'],
+    ['blocked checks_exhausted','DENY'],
+    ['human_gate schema_migration','ESCALATE'],
+    ['human_gate dependency_add','ESCALATE'],
+  ];
+  const VERDICT_LABEL = {
+    GRANT: '<span class="cs">ZAPSÁNO</span><span class="en">SEALED</span>',
+    DENY: '<span class="cs">BLOKOVÁNO</span><span class="en">BLOCKED</span>',
+    ESCALATE: '<span class="cs">ČEKÁ ČLOVĚK</span><span class="en">HUMAN</span>',
+  };
+  function randHash(){
+    const h = Math.floor(Math.random()*0xfffff).toString(16).padStart(5,'0');
+    const t = Math.floor(Math.random()*0xfff).toString(16).padStart(3,'0');
+    return `0x${h}…${t}`;
+  }
+  let seed = [
+    { id:4824, actor:'director',      action:'checks_passed',            verdict:'GRANT',    hash:'0x7f3c…e12' },
+    { id:4823, actor:'director',      action:'checks_failed n=1',        verdict:'GRANT',    hash:'0x1a9b…4c0' },
+    { id:4822, actor:'director',      action:'human_gate dependency_add',verdict:'ESCALATE', hash:'0x9d21…7ef' },
+    { id:4821, actor:'msvanda',       action:'task assigned',            verdict:'GRANT',    hash:'0x3c88…0a5' },
+    { id:4820, actor:'control-plane', action:'workspace_served',         verdict:'GRANT',    hash:'0x5e17…b93' },
+  ];
+  const ledgerRows = document.getElementById('ledgerRows');
+  const ledgerSeq = document.getElementById('ledgerSeq');
+  function rowHTML(e){
+    return `<div class="ledger-row">
+      <span class="lg-id">#${e.id}</span>
+      <span class="lg-actor">${e.actor}</span>
+      <span class="lg-action">${e.action}</span>
+      <span class="lg-verdict v-${e.verdict}">${VERDICT_LABEL[e.verdict]}</span>
+      <span class="lg-hash">${e.hash}</span>
+    </div>`;
+  }
+  function renderLedger(){
+    ledgerRows.innerHTML = seed.map(rowHTML).join('');
+    ledgerSeq.textContent = seed[0].id;
+  }
+  renderLedger();
+  let ledgerPaused = false;
+  document.getElementById('ledgerPanel').addEventListener('mouseenter', () => ledgerPaused = true);
+  document.getElementById('ledgerPanel').addEventListener('mouseleave', () => ledgerPaused = false);
+  if (!reduced) {
+    setInterval(() => {
+      if (ledgerPaused) return;
+      const next = {
+        id: seed[0].id + 1,
+        actor: actors[Math.floor(Math.random()*actors.length)],
+        ...(() => { const [a, v] = EVENTS[Math.floor(Math.random()*EVENTS.length)];
+                    return { action: a, verdict: v }; })(),
+        hash: randHash(),
+      };
+      seed = [next, ...seed].slice(0, 6);
+      renderLedger();
+    }, 2200);
+  }
+
+  /* ── organismy na pozadí: simulace přirozeného výběru s genetikou ──
+     Zůstává to soustava malých bodů — žádný bod nikdy nenaroste do
+     velkého kruhu, "velikost skupiny" je jen počet stejného druhu
+     nablízku. Každý bod má vlastní genetiku (odvaha, rychlost,
+     družnost, vnímavost, dravost), energii a krátkou paměť (strach po
+     útoku/zabití nablízku, sebevědomí po úlovku). Poražený v souboji má
+     šanci utéct, pokud je rychlejší. Při rozmnožení dítě dědí
+     vlastnosti rodiče s drobnou mutací — přirozený výběr, nic napevno.
+     Pohyb navíc netvoří čistý náhodný šum, ale plyne podle pomalu se
+     měnícího "proudového pole" (levný šum místo Perlinu) — proto to
+     spíš teče jako mikroorganismy než létá jako částice. Hejna se
+     volně tvoří a zase rozpouštějí, celé pole nepatrně "dýchá" a
+     kurzor nic nespawnuje — jen jako dotyk vytvoří vlnu, která
+     organismy kolem sebe na chvíli zvíří a pak se to zas uklidní. Nové
+     druhy se čas od času objeví samy, na okraji populace. */
+  /* ── ambientní reakčně-difuzní textura pod organismy (Gray–Scott, WebGL2) ──
+     Plošný, pomalu se vlnící labyrintový vzor pod tečkami — ne bodovaný.
+     Kde je hustě organismů, vzor se tam probouzí silněji (obě vrstvy
+     spolu volně komunikují přes injekci bodů do V-kanálu). Bez WebGL2
+     se tahle vrstva prostě nevykreslí, bodový ekosystém běží dál beze
+     změny — je to čistě navrchní ambientní efekt, ne závislost. */
+  const rd = (function(){
+    const canvas = document.getElementById('rd');
+    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false });
+    if (!gl || !gl.getExtension('EXT_color_buffer_float')) return null;
+    const floatBlend = !!gl.getExtension('EXT_float_blend');
+
+    function compile(type, src){
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(s)); return null; }
+      return s;
+    }
+    function makeProgram(vsSrc, fsSrc){
+      const vs = compile(gl.VERTEX_SHADER, vsSrc), fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+      if (!vs || !fs) return null;
+      const p = gl.createProgram();
+      gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(p)); return null; }
+      return p;
+    }
+
+    const VS = `#version 300 es
+      in vec2 aPos; out vec2 vUv;
+      void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.0,1.0); }`;
+    const SIM_FS = `#version 300 es
+      precision highp float;
+      in vec2 vUv; out vec4 outColor;
+      uniform sampler2D uState; uniform vec2 uTexel; uniform float uF, uK;
+      void main(){
+        vec2 c = texture(uState, vUv).rg;
+        vec2 l = texture(uState, vUv - vec2(uTexel.x,0.0)).rg;
+        vec2 r = texture(uState, vUv + vec2(uTexel.x,0.0)).rg;
+        vec2 u = texture(uState, vUv - vec2(0.0,uTexel.y)).rg;
+        vec2 d = texture(uState, vUv + vec2(0.0,uTexel.y)).rg;
+        vec2 lap = l + r + u + d - 4.0*c;
+        float uu = c.r, vv = c.g;
+        float reaction = uu*vv*vv;
+        float du = 0.2097*lap.x - reaction + uF*(1.0-uu);
+        float dv = 0.105*lap.y + reaction - (uF+uK)*vv;
+        outColor = vec4(clamp(c + vec2(du,dv), 0.0, 1.0), 0.0, 1.0);
+      }`;
+    const RENDER_FS = `#version 300 es
+      precision highp float;
+      in vec2 vUv; out vec4 outColor;
+      uniform sampler2D uState;
+      void main(){
+        float v = texture(uState, vUv).g;
+        vec3 bg = vec3(0.02,0.024,0.016);
+        vec3 mid = vec3(0.03,0.06,0.09);
+        vec3 edge = vec3(0.42,1.0,0.36);
+        float body = smoothstep(0.05,0.34,v);
+        float rim = smoothstep(0.14,0.30,v) * (1.0-smoothstep(0.30,0.46,v));
+        outColor = vec4(mix(bg, mid, body*0.26) + edge*rim*0.16, 1.0);
+      }`;
+    const INJECT_VS = `#version 300 es
+      in vec2 aPos;
+      void main(){ gl_Position = vec4(aPos*2.0-1.0, 0.0, 1.0); gl_PointSize = 3.0; }`;
+    const INJECT_FS = `#version 300 es
+      precision highp float; out vec4 outColor;
+      void main(){ outColor = vec4(0.0, 0.9, 0.0, 1.0); }`;
+
+    const simProg = makeProgram(VS, SIM_FS), renderProg = makeProgram(VS, RENDER_FS), injectProg = makeProgram(INJECT_VS, INJECT_FS);
+    if (!simProg || !renderProg || !injectProg) return null;
+
+    const quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    function quadVaoFor(prog){
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      const loc = gl.getAttribLocation(prog, 'aPos');
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+      return vao;
+    }
+    const simVao = quadVaoFor(simProg), renderVao = quadVaoFor(renderProg);
+    const injectBuf = gl.createBuffer();
+    const injectVao = gl.createVertexArray();
+    gl.bindVertexArray(injectVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, injectBuf);
+    const injLoc = gl.getAttribLocation(injectProg, 'aPos');
+    gl.enableVertexAttribArray(injLoc);
+    gl.vertexAttribPointer(injLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    const simFLoc = gl.getUniformLocation(simProg, 'uF'), simKLoc = gl.getUniformLocation(simProg, 'uK');
+    const simTexelLoc = gl.getUniformLocation(simProg, 'uTexel'), simStateLoc = gl.getUniformLocation(simProg, 'uState');
+    const renderStateLoc = gl.getUniformLocation(renderProg, 'uState');
+
+    let simW = 0, simH = 0, texA, texB, fboA, fboB, texel = [0,0];
+
+    function makeTex(w, h){
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.FLOAT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    }
+    function makeFbo(tex){
+      const f = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return f;
+    }
+    function seedNoise(){
+      const data = new Float32Array(simW*simH*4);
+      for (let i=0; i<simW*simH; i++) data[i*4] = 1;
+      for (let s=0; s<12; s++){
+        const cx = Math.floor(Math.random()*simW), cy = Math.floor(Math.random()*simH);
+        for (let dy=-4; dy<=4; dy++) for (let dx=-4; dx<=4; dx++){
+          const x=cx+dx, y=cy+dy;
+          if (x<0||y<0||x>=simW||y>=simH||dx*dx+dy*dy>16) continue;
+          data[(y*simW+x)*4+1] = 1;
+        }
+      }
+      gl.bindTexture(gl.TEXTURE_2D, texA);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, simW, simH, 0, gl.RGBA, gl.FLOAT, data);
+      gl.bindTexture(gl.TEXTURE_2D, texB);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, simW, simH, 0, gl.RGBA, gl.FLOAT, data);
+    }
+    function resize(w, h){
+      canvas.width = w; canvas.height = h;
+      // izotropní hustota mřížky — nezávisí na poměru stran, jinak by se na
+      // vysoké stránce (po zapnutí scrollování s obsahem) vzor roztáhl do pruhů
+      const TEXEL_PX = 10;
+      simW = Math.min(360, Math.max(64, Math.round(w / TEXEL_PX)));
+      simH = Math.min(900, Math.max(64, Math.round(h / TEXEL_PX)));
+      texel = [1/simW, 1/simH];
+      texA = makeTex(simW, simH); texB = makeTex(simW, simH);
+      fboA = makeFbo(texA); fboB = makeFbo(texB);
+      seedNoise();
+    }
+
+    const injectData = new Float32Array(2 * 600);
+    function injectAt(points){
+      const n = Math.min(points.length, 600);
+      if (!n) return;
+      for (let i=0; i<n; i++){ injectData[i*2] = points[i][0]; injectData[i*2+1] = points[i][1]; }
+      gl.bindBuffer(gl.ARRAY_BUFFER, injectBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, injectData.subarray(0, n*2), gl.DYNAMIC_DRAW);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fboA);
+      gl.viewport(0, 0, simW, simH);
+      gl.useProgram(injectProg);
+      gl.bindVertexArray(injectVao);
+      if (floatBlend){ gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); }
+      gl.drawArrays(gl.POINTS, 0, n);
+      if (floatBlend) gl.disable(gl.BLEND);
+      gl.bindVertexArray(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    function step(){
+      gl.viewport(0, 0, simW, simH);
+      gl.useProgram(simProg);
+      gl.bindVertexArray(simVao);
+      gl.uniform2fv(simTexelLoc, texel);
+      gl.uniform1f(simFLoc, 0.037);
+      gl.uniform1f(simKLoc, 0.0615);
+      for (let i=0; i<2; i++){
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texA);
+        gl.uniform1i(simStateLoc, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        [texA, texB] = [texB, texA];
+        [fboA, fboB] = [fboB, fboA];
+      }
+      gl.bindVertexArray(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    function render(){
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(renderProg);
+      gl.bindVertexArray(renderVao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texA);
+      gl.uniform1i(renderStateLoc, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.bindVertexArray(null);
+    }
+    return { resize, step, render, injectAt };
+  })();
+
+  (function(){
+    const canvas = document.getElementById('dots');
+    const ctx = canvas.getContext('2d');
+
+    const COLOR = [[163,255,92], [240,214,74], [255,95,86]]; // druhy: zelená / žlutá / červená
+    const DRIFT = [[210,255,110], [255,190,60], [255,120,80]]; // decentní barevný posun (lime / amber / red-orange)
+    const CAP = 780;             // 3× víc bodů
+    const POINT_R = 1.9;         // menší a tlumenější — víc bodů, ale decentnější
+    const SIGHT = 130;           // dohled pro chování (kam se natočit), škáluje se vnímavostí
+    const GROUP_R = 32;          // dosah pro velikost hejna — objektivní, genetikou se neškáluje
+    const CONTACT = 6;           // dotyk — tady se řeší žrádlo
+    const FRICTION = 0.9;
+    const MAX_SPEED = 100;       // klidová rychlost je plynulá, únik/vlna ji krátce přesáhne
+    const WANDER = 14, FLOW = 28, SEEK = 34, FLEE = 85; // silnější aktivita
+    const SATIETY_DECAY = 0.05, SATIETY_FLOOR = 0.08;
+    const ENERGY_DRAIN = 0.02, ENERGY_REGEN = 0.015, ENERGY_EAT = 0.6;
+    const FEAR_MAX = 3, FEAR_DECAY = 1, CONF_MAX = 2, CONF_DECAY = 1;
+    const REPRO_BASE_P = 0.12;   // /s, škáluje se sytostí a energií, jen když je bod v hejnu
+    const REPRO_MIN_AGE = 3;
+    const MUTATION = 0.1;
+    const TRAITS = ['courage', 'speed', 'sociability', 'perception', 'aggression'];
+    const RIPPLE_SPEED = 260, RIPPLE_WIDTH = 90, RIPPLE_LIFE = 1.4, RIPPLE_FORCE = 220; // RIPPLE_LIFE v sekundách
+
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+    function randTrait(){ return 0.65 + Math.random()*0.7; }
+    // levný náhrad Perlinu — hladké, plynule se měnící pole, žádná knihovna navíc
+    function flowAngle(x, y, t){
+      return (Math.sin(x*0.006 + t*0.16) + Math.cos(y*0.007 - t*0.12) +
+              Math.sin((x - y)*0.004 + t*0.08)) * Math.PI * 0.5;
+    }
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = 0, h = 0, time = 0;
+    let particles = [];
+    let grid = new Map();
+    let ripples = [];
+    const CELL = SIGHT;
+    let lastRipple = -999;
+    const mouse = { x:-9999, y:-9999, down:false };
+    let raf = 0, last = 0, spawnTimer = 0.6;
+
+    function pageH(){ return Math.max(window.innerHeight, document.documentElement.scrollHeight); }
+    function resize(){
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth; h = pageH(); // pozadí se táhne přes celou stránku, ne jen výřez — scrolluje s obsahem
+      canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr);
+      canvas.style.width = w+'px'; canvas.style.height = h+'px';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if (rd) rd.resize(canvas.width, canvas.height);
+    }
+
+    // vizuální hierarchie: většina bodů je malá a tlumená, jen hrstka výrazná/vzácná
+    function pickTier(){
+      const r = Math.random();
+      return r < 0.7 ? 0 : r < 0.9 ? 1 : r < 0.98 ? 2 : 3;
+    }
+    function spawnOne(species, x, y, parent){
+      if (particles.length >= CAP) return;
+      const p = {
+        x, y, vx:(Math.random()-.5)*6, vy:(Math.random()-.5)*6,
+        species, satiety: SATIETY_FLOOR + Math.random()*0.15,
+        energy: 0.8, age: 0, fear: 0, confidence: 0,
+        tier: parent ? parent.tier : pickTier(),
+        colorDrift: parent ? clamp(parent.colorDrift + (Math.random()-0.5)*0.1, 0, 1) : (Math.random() < 0.85 ? Math.random()*0.35 : 0.35+Math.random()*0.5),
+        breathPhase: Math.random()*Math.PI*2,
+      };
+      for (const k of TRAITS) p[k] = parent ? clamp(parent[k] + (Math.random()-0.5)*MUTATION, 0.4, 1.6) : randTrait();
+      particles.push(p);
+    }
+    // Rozeseté jednotlivé body by čekaly minuty, než se náhodou potkají —
+    // proto se hned na startu naseje pár hejn na druh, ne prázdná plocha.
+    function seed(){
+      particles = [];
+      for (let s = 0; s < COLOR.length; s++){
+        const clusters = 9 + Math.floor(Math.random()*4); // 3× víc hejn než dřív
+        for (let c = 0; c < clusters; c++){
+          const cx = Math.random()*w, cy = Math.random()*h;
+          const n = 4 + Math.floor(Math.random()*5);
+          for (let i = 0; i < n; i++) spawnOne(s, cx + (Math.random()-.5)*40, cy + (Math.random()-.5)*40);
+        }
+      }
+    }
+
+    const key = (cx,cy) => cx+','+cy;
+    function buildGrid(){
+      grid = new Map();
+      for (const p of particles){
+        const k = key(Math.floor(p.x/CELL), Math.floor(p.y/CELL));
+        let arr = grid.get(k);
+        if (!arr) { arr = []; grid.set(k, arr); }
+        arr.push(p);
+      }
+    }
+    function neighborsOf(p){
+      const cx = Math.floor(p.x/CELL), cy = Math.floor(p.y/CELL), out = [];
+      for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++){
+        const arr = grid.get(key(cx+dx, cy+dy));
+        if (arr) for (const q of arr) if (q !== p) out.push(q);
+      }
+      return out;
+    }
+    // "velikost hejna" kolem bodu — kolik stejného druhu je nablízku (+ ten bod sám).
+    // Objektivní číslo, stejné pro každého, kdo se dívá — genetika ho nezkresluje.
+    function groupSize(p, nb){
+      let c = 1;
+      for (const q of nb) if (q.species === p.species && Math.hypot(q.x-p.x, q.y-p.y) < GROUP_R) c++;
+      return c;
+    }
+
+    function step(dt){
+      time += dt;
+      buildGrid();
+
+      // 1) chování: proudové pole + slabý šum + tažení ke stejnému druhu +
+      //    lov/útěk podle velikosti hejna, tlumené osobností, strachem a únavou
+      for (const p of particles){
+        p.age += dt;
+        const nb = neighborsOf(p);
+        const sight = SIGHT * p.perception;
+        const stamina = 0.4 + 0.6*p.energy; // unavený reaguje slaběji na vše
+        const angle = flowAngle(p.x, p.y, time);
+        let fx = Math.cos(angle)*FLOW + (Math.random()-.5)*WANDER;
+        let fy = Math.sin(angle)*FLOW + (Math.random()-.5)*WANDER;
+        // dotyk vytváří vlnu, ne magnet — kolem právě procházejícího čela se
+        // organismy krátce zvíří a pak se to samo uklidní
+        for (const r of ripples){
+          const age = time - r.start, front = age*RIPPLE_SPEED;
+          const dx = p.x-r.x, dy = p.y-r.y, dist = Math.hypot(dx,dy) || 0.0001;
+          const delta = Math.abs(dist-front);
+          if (delta < RIPPLE_WIDTH){
+            const power = (1 - delta/RIPPLE_WIDTH) * Math.max(0, 1 - age/RIPPLE_LIFE);
+            const nx = dx/dist, ny = dy/dist;
+            fx += (-ny*0.7 + nx*0.3) * power * RIPPLE_FORCE;
+            fy += (nx*0.7 + ny*0.3) * power * RIPPLE_FORCE;
+          }
+        }
+        let nearestSame = null, dSame = Infinity, nearestOther = null, dOther = Infinity;
+        for (const q of nb){
+          const dx = q.x-p.x, dy = q.y-p.y, d = Math.hypot(dx,dy);
+          if (d > sight || d < 0.0001) continue;
+          if (q.species === p.species){ if (d < dSame){ dSame = d; nearestSame = q; } }
+          else if (d < dOther){ dOther = d; nearestOther = q; }
+        }
+        if (nearestSame){
+          const seek = SEEK * p.sociability;
+          fx += (nearestSame.x-p.x)/dSame * seek;
+          fy += (nearestSame.y-p.y)/dSame * seek;
+        }
+        if (nearestOther){
+          const dx = nearestOther.x-p.x, dy = nearestOther.y-p.y;
+          const myGroup = groupSize(p, nb), otherGroup = groupSize(nearestOther, neighborsOf(nearestOther));
+          // strach snižuje odvahu, čerstvé sebevědomí z úlovku ji zvyšuje
+          const bravery = p.courage * (1 - 0.5*Math.min(1, p.fear/FEAR_MAX)) * (1 + 0.3*Math.min(1, p.confidence/CONF_MAX));
+          if (otherGroup > myGroup * (0.6 + 0.6*bravery)){
+            // menší/opatrnější hejno prchá před větším — silněji, čím horší přesila
+            const ratio = otherGroup/Math.max(1, myGroup);
+            fx -= dx/dOther * FLEE * ratio * p.speed; fy -= dy/dOther * FLEE * ratio * p.speed;
+            p.fear = Math.max(p.fear, 1.5); // krátká paměť na to, že prchal
+          } else {
+            // dravost roste s hladem (nízká sytost) i genetickou agresivitou
+            const drav = (1 - p.satiety) * p.aggression * bravery;
+            fx += dx/dOther * SEEK * drav * p.speed; fy += dy/dOther * SEEK * drav * p.speed;
+          }
+        }
+        p.vx = (p.vx + fx*dt*stamina) * FRICTION;
+        p.vy = (p.vy + fy*dt*stamina) * FRICTION;
+        const sp = Math.hypot(p.vx, p.vy);
+        if (sp > MAX_SPEED){ p.vx = p.vx/sp*MAX_SPEED; p.vy = p.vy/sp*MAX_SPEED; } // klid je pomalý, únik krátce přesáhne
+        p.fear = Math.max(0, p.fear - FEAR_DECAY*dt);
+        p.confidence = Math.max(0, p.confidence - CONF_DECAY*dt);
+        // sprint/útěk/lov stojí energii, klidný pohyb ji pomalu vrací
+        const speedMag = Math.hypot(p.vx, p.vy);
+        p.energy = clamp(p.energy - (0.006 + ENERGY_DRAIN*Math.min(1, speedMag/70))*dt + ENERGY_REGEN*dt*(speedMag<15?1:0), 0, 1);
+      }
+      for (const p of particles){
+        p.x = (p.x + p.vx*dt + w) % w;
+        p.y = (p.y + p.vy*dt + h) % h;
+      }
+      for (let i=ripples.length-1; i>=0; i--) if (time-ripples[i].start > RIPPLE_LIFE) ripples.splice(i,1);
+
+      // 2) dotyk: stejný druh se jen podrží v hejnu (nic nemizí), jiný druh —
+      //    bod menšího hejna na místě setkání je sežrán (pokud neuteče) a mizí;
+      //    jeho blízcí příbuzní ze zabití zůstanou vystrašení
+      buildGrid();
+      const dead = new Set();
+      for (const p of particles){
+        if (dead.has(p)) continue;
+        const nb = neighborsOf(p);
+        for (const q of nb){
+          if (q === p || dead.has(q) || dead.has(p) || q.species === p.species) continue;
+          if (Math.hypot(q.x-p.x, q.y-p.y) > CONTACT) continue;
+          const myGroup = groupSize(p, nb), otherGroup = groupSize(q, neighborsOf(q));
+          const winner = myGroup >= otherGroup ? p : q;
+          const loser = winner === p ? q : p;
+          // rychlejší poražený má šanci vyklouznout
+          const escape = clamp(0.1 + 0.35*(loser.speed - winner.speed), 0, 0.6);
+          if (Math.random() < escape){
+            const ex = loser.x-winner.x, ey = loser.y-winner.y, ed = Math.hypot(ex,ey) || 1;
+            loser.vx += (ex/ed) * 90; loser.vy += (ey/ed) * 90;
+            loser.fear = FEAR_MAX;
+            spawnRipple(winner.x, winner.y); // setkání — i nezdařené — udělá vlnu
+            continue;
+          }
+          winner.satiety = 1; winner.energy = Math.min(1, winner.energy + ENERGY_EAT);
+          winner.confidence = CONF_MAX; // úspěšný lov krátce zvýší sebevědomí
+          for (const r of neighborsOf(loser)) if (r.species === loser.species) r.fear = FEAR_MAX; // "tady se stalo něco zlého"
+          spawnRipple(winner.x, winner.y);
+          dead.add(loser);
+          if (loser === p) break;
+        }
+      }
+      if (dead.size) particles = particles.filter(p => !dead.has(p));
+
+      // 3) sytost dohasíná zpět k hladu; syté a odpočaté body v hejnu, které
+      //    už nejsou úplně mladé, se snáz rozmnoží
+      buildGrid();
+      const births = [];
+      for (const p of particles){
+        p.satiety = Math.max(SATIETY_FLOOR, p.satiety - SATIETY_DECAY*dt);
+        if (particles.length + births.length >= CAP) continue;
+        if (p.age < REPRO_MIN_AGE || p.energy < 0.45) continue;
+        const inGroup = groupSize(p, neighborsOf(p)) >= 2; // "dva stejného druhu se spojili"
+        if (!inGroup) continue;
+        const pReproduce = REPRO_BASE_P * (0.3 + 0.9*p.satiety) * p.energy * dt;
+        if (Math.random() < pReproduce){
+          births.push({ species:p.species, x:p.x, y:p.y, parent:p });
+          p.satiety *= 0.7; p.energy = Math.max(0, p.energy - 0.2);
+        }
+      }
+      for (const b of births) spawnOne(b.species, b.x + (Math.random()-.5)*10, b.y + (Math.random()-.5)*10, b.parent);
+
+      // 4) čas od času se samy od sebe objeví nové druhy — nezávisle na kurzoru
+      spawnTimer -= dt;
+      if (spawnTimer <= 0){
+        spawnTimer = 0.5 + Math.random()*0.7;
+        spawnOne(Math.floor(Math.random()*COLOR.length), Math.random()*w, Math.random()*h);
+      }
+    }
+
+    // tón druhu s decentním individuálním posunem (lime/amber, vzácně k červené)
+    function tint(p){
+      const base = COLOR[p.species], drift = DRIFT[p.species], t = p.colorDrift;
+      return [0,1,2].map(i => Math.round(base[i] + (drift[i]-base[i])*t));
+    }
+
+    function draw(){
+      ctx.clearRect(0, 0, w, h);
+      for (const r of ripples){
+        const age = time - r.start, radius = age*RIPPLE_SPEED, fade = Math.max(0, 1 - age/RIPPLE_LIFE);
+        if (fade <= 0) continue;
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(163,255,92,${fade*0.14})`;
+        ctx.lineWidth = 1.5;
+        ctx.arc(r.x, r.y, radius, 0, Math.PI*2);
+        ctx.stroke();
+      }
+      for (const p of particles){
+        const c = tint(p);
+        const vitality = 0.5*p.satiety + 0.5*p.energy;
+        const breathe = 0.85 + 0.15*Math.sin(time*0.4 + p.breathPhase);
+        const tierMul = [0.55, 0.75, 1, 1.25][p.tier];
+        const active = Math.max(p.fear/FEAR_MAX, p.confidence/CONF_MAX); // glow hlavně při aktivitě, ne pořád
+        const glow = p.tier >= 2 ? 0.16 : active > 0.4 ? active*0.13 : 0;
+        if (glow > 0.02){
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${glow*breathe})`;
+          ctx.arc(p.x, p.y, POINT_R*3*tierMul, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${(0.24+0.2*vitality)*breathe})`;
+        ctx.arc(p.x, p.y, POINT_R*tierMul*breathe, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    function loop(now){
+      let dt = last ? (now-last)/1000 : 1/60;
+      dt = Math.min(dt, 1/20);
+      last = now;
+      step(dt);
+      draw();
+      if (rd){
+        rd.injectAt(particles.map(p => [p.x/w, 1 - p.y/h]));
+        rd.step();
+        rd.render();
+      }
+      raf = requestAnimationFrame(loop);
+    }
+
+    function spawnRipple(x, y){ // ze setkání v simulaci — bez čekání na kurzor
+      ripples.push({ x, y, start: time });
+      if (ripples.length > 10) ripples.shift();
+    }
+    function pushRipple(x, y){ // z pohybu kurzoru — jemně přiškrcené, ať to nezaplaví
+      if (time - lastRipple < 0.15) return;
+      lastRipple = time;
+      spawnRipple(x, y);
+    }
+    window.addEventListener('resize', () => { resize(); seed(); });
+    window.addEventListener('mousemove', e => { mouse.x = e.pageX; mouse.y = e.pageY; });
+    window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
+    window.addEventListener('pointermove', e => {
+      mouse.x = e.pageX; mouse.y = e.pageY;
+      pushRipple(e.pageX, e.pageY); // vlna jde automaticky ze samotného pohybu, ne z tažení
+    });
+    window.addEventListener('pointerdown', e => {
+      mouse.x = e.pageX; mouse.y = e.pageY;
+      for (let i = 0; i < 3; i++) spawnOne(Math.floor(Math.random()*COLOR.length), e.pageX, e.pageY); // klik = nový bod
+      if (!/^(a|button|input|label)$/i.test(e.target.tagName)) e.preventDefault();
+    });
+
+    resize();
+    seed();
+    setInterval(() => { if (Math.abs(pageH() - h) > 30) resize(); }, 900); // stránka může výšku měnit (jazyk, obsah)
+    if (reduced) { draw(); if (rd) rd.render(); } else raf = requestAnimationFrame(loop);
+  })();
 </script>
 </body>
 </html>
