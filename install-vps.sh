@@ -421,6 +421,12 @@ dpkg-reconfigure -f noninteractive unattended-upgrades >>"$LOG" 2>&1 || true
 if (( FRESH )); then
   step "Generuji tajemství"
   gen() { openssl rand -base64 "${1:-32}" | tr -d '\n=+/' | cut -c1-"${2:-32}"; }
+  # .env níž se čte trojím způsobem: sourcuje ho bash ("set -a; . .env"),
+  # parsuje ho docker compose (--env-file) a čte ho python-dotenv stylem.
+  # Cokoli, co napsal člověk — jméno, e-mail, heslo — může mít mezeru, $
+  # nebo zpětný apostrof. Bez uzavření do '…' by bash při sourcování na
+  # mezeře spadl ("command not found") nebo na $ tiše uřízl hodnotu.
+  envq() { printf '%s' "$1" | sed "s/'/'\\\\''/g"; }
 
   TMPK=$(mktemp -d); chmod 700 "$TMPK"
   openssl genpkey -algorithm ED25519 -out "$TMPK/wo.pem" 2>>"$LOG" \
@@ -461,8 +467,8 @@ if (( FRESH )); then
 # ═══════════════════════════════════════════════════════════════
 AGENTICDEV_INSTANCE_ID=$INSTANCE_ID
 AGENTICDEV_MODE=$AGENTICDEV_MODE
-AGENTICDEV_DOMAIN=$DOMAIN
-CONTROL_PLANE_URL=$CP_URL
+AGENTICDEV_DOMAIN='$(envq "$DOMAIN")'
+CONTROL_PLANE_URL='$(envq "$CP_URL")'
 VPS_HOST=$TS_IP
 # tailscale = vnitřní služby na tailnetu, přihlášení dělá tailnet
 # domain    = vnitřní služby na 127.0.0.1, přihlášení obyčejným SSH klíčem
@@ -473,11 +479,11 @@ BIND_ADDR=$TS_IP
 TZ=Europe/Prague
 
 # ─── admin ───────────────────────────────────────────────────
-# Kdo tuhle instanci spravuje. Zakládá se z toho `principal`, aby u
+# Kdo tuhle instanci spravuje. Zakládá se z toho \`principal\`, aby u
 # rozhodnutí odklikaného v panelu bylo v auditní stopě vidět kdo — dřív
 # tam byl actor prázdný.
-ADMIN_NAME=$ADMIN_NAME
-ADMIN_EMAIL=$ADMIN_EMAIL
+ADMIN_NAME='$(envq "$ADMIN_NAME")'
+ADMIN_EMAIL='$(envq "$ADMIN_EMAIL")'
 
 # ─── tajemství ───────────────────────────────────────────────
 POSTGRES_PASSWORD=$PG_PW
@@ -486,8 +492,8 @@ JWT_SECRET=$JWT
 WO_SIGNING_KEY_B64=$WO_PRIV
 WO_VERIFY_KEY_B64=$WO_PUB
 JOIN_TOKEN=$JOIN_TOKEN
-DASHBOARD_TOKEN=$ADMIN_PW
-ENROLL_PASSWORD=$ENROLL_PW
+DASHBOARD_TOKEN='$(envq "$ADMIN_PW")'
+ENROLL_PASSWORD='$(envq "$ENROLL_PW")'
 LEASE_HOURS=4
 
 # ─── veřejná registrace přes Tailscale Funnel ────────────────────────
@@ -498,27 +504,27 @@ TS_API_KEY=
 TS_TAILNET=-
 
 # ─── Forgejo ─────────────────────────────────────────────────
-FORGEJO_ADMIN_USER=$ADMIN_USER
-FORGEJO_ADMIN_EMAIL=$ADMIN_EMAIL
+FORGEJO_ADMIN_USER='$(envq "$ADMIN_USER")'
+FORGEJO_ADMIN_EMAIL='$(envq "$ADMIN_EMAIL")'
 FORGEJO_ADMIN_PASSWORD=$FJ_PW
 FORGEJO_SECRET_KEY=$FJ_SECRET
-FORGEJO_ROOT_URL=$FJ_ROOT
+FORGEJO_ROOT_URL='$(envq "$FJ_ROOT")'
 FORGEJO_TOKEN=
 FORGEJO_HOOK_SECRET=$FJ_HOOK_SECRET
 RUNNER_SECRET=$RUNNER_SECRET
 RUNNER_TAG=6
 
 # ─── mail ────────────────────────────────────────────────────
-SMTP_HOST=${SMTP_HOST:-}
+SMTP_HOST='$(envq "${SMTP_HOST:-}")'
 SMTP_PORT=587
-SMTP_USER=${SMTP_USER:-}
-SMTP_PASSWORD=${SMTP_PASS:-}
-SMTP_FROM=${ADMIN_EMAIL}
+SMTP_USER='$(envq "${SMTP_USER:-}")'
+SMTP_PASSWORD='$(envq "${SMTP_PASS:-}")'
+SMTP_FROM='$(envq "$ADMIN_EMAIL")'
 
 # ─── modely ──────────────────────────────────────────────────
 MODEL_BACKEND=$MODEL_BACKEND
 MODEL_BASE_URL=$MODEL_BASE_URL
-MODEL_API_KEY=${MODEL_KEY:-}
+MODEL_API_KEY='$(envq "${MODEL_KEY:-}")'
 DEFAULT_MODEL=$DEFAULT_MODEL
 LOCAL_MODEL=local/qwen2.5-coder:32b
 MODEL_MAX_TOKENS=8000
