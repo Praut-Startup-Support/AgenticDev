@@ -9,6 +9,10 @@ i v minor verzi — dokud platí *alpha* v README, ber to tak.
 
 ## [Nevydáno]
 
+_Zatím nic._
+
+## [0.2.0] — 2026-08-14
+
 ### Přidáno
 
 - **Doménový režim** — Tailscale už není povinný. Instalace se ptá, jestli má
@@ -65,9 +69,9 @@ nikdy nebyla.
 
 ## [0.1.0] — nevydáno
 
-První sestavení. Tag existuje, release je zatím **draft** — dokud se
-nepublikuje, `releases/latest/download/…` vrací 404 a instalace podle README
-nefunguje.
+První sestavení. Tag `v0.1.0` existuje, ale release u něj zůstal draft a
+nikdy se nepublikoval. Instaluj `v0.2.0` — `v0.1.0` neobsahuje nic z toho,
+co je výš, včetně oprav, které jsou pro provoz podstatné.
 
 - VPS stack: Postgres s pgvectorem, Forgejo s Actions, MinIO, Caddy, control
   plane, denní zálohy přes restic
@@ -79,5 +83,6 @@ nefunguje.
 - Klienti pro macOS, Linux a Windows; registrace přes veřejnou stránku
 - Reprodukovatelný build instalačního artefaktu
 
-[Nevydáno]: https://github.com/Praut-Startup-Support/AgenticDev/compare/v0.1.0...HEAD
+[Nevydáno]: https://github.com/Praut-Startup-Support/AgenticDev/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Praut-Startup-Support/AgenticDev/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Praut-Startup-Support/AgenticDev/releases/tag/v0.1.0
