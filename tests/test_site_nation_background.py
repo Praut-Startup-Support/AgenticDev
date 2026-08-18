@@ -23,6 +23,15 @@ class SiteNationBackground(unittest.TestCase):
         self.assertIn("cells[i]=-1", self.sim)
         self.assertIn("alive<2", self.sim)
 
+    def test_green_only_fast_local_attack_fronts(self):
+        self.assertIn("const palette = [", self.sim)
+        for non_green in ("240,214,74", "104,218,255", "255,112,91", "198,145,255"):
+            self.assertNotIn(non_green, self.sim)
+        self.assertIn("const front=[j,...neighbors(j)", self.sim)
+        self.assertIn("attacks.push({from:i,to:j,owner", self.sim)
+        self.assertIn("Math.floor(cells.length*.12)", self.sim)
+        self.assertIn("now-last<36", self.sim)
+
     def test_omits_openfront_combat_and_terrain_systems(self):
         executable = self.sim[self.sim.index("(function(){"):]
         for omitted in ("allianceBehavior", "Warship", "Missile", "Mountain", "waterTile"):

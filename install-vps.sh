@@ -58,26 +58,33 @@ if (( ! MODE_CHECK && ! MODE_YES )) && ! { true </dev/tty; } 2>/dev/null; then
 fi
 
 # Jazyk instalace je součástí konfigurace instance. U upgradu se převezme,
-# u automatické instalace ho lze nastavit AGENTICDEV_LANG=cs|en a u nové
+# u automatické instalace ho lze nastavit jedním z podporovaných kódů a u nové
 # interaktivní instalace je to úplně první volba.
 AGENTICDEV_LANG="${AGENTICDEV_LANG:-}"
 if [[ -z "$AGENTICDEV_LANG" && -r "$ENVF" ]]; then
   AGENTICDEV_LANG=$(sed -n 's/^AGENTICDEV_LANG=//p' "$ENVF" | tail -1)
 fi
 if [[ -z "$AGENTICDEV_LANG" && ! $MODE_CHECK -eq 1 && ! $MODE_YES -eq 1 ]]; then
-  printf "\n  Choose language / Vyber jazyk\n\n  1) Čeština\n  2) English\n\n"
+  printf "\n  Choose language / Vyber jazyk\n\n  1) Čeština       2) English\n  3) Deutsch       4) Español\n  5) Русский       6) 中文\n  7) Português     8) Français\n  9) हिन्दी          10) العربية\n\n"
   read -rp "  číslo / number (Enter = 1): " LANG_PICK </dev/tty
-  [[ "${LANG_PICK:-1}" == 2 ]] && AGENTICDEV_LANG=en || AGENTICDEV_LANG=cs
+  case "${LANG_PICK:-1}" in
+    1) AGENTICDEV_LANG=cs ;; 2) AGENTICDEV_LANG=en ;;
+    3) AGENTICDEV_LANG=de ;; 4) AGENTICDEV_LANG=es ;;
+    5) AGENTICDEV_LANG=ru ;; 6) AGENTICDEV_LANG=zh ;;
+    7) AGENTICDEV_LANG=pt ;; 8) AGENTICDEV_LANG=fr ;;
+    9) AGENTICDEV_LANG=hi ;; 10) AGENTICDEV_LANG=ar ;;
+    *) die "Neplatná volba / Invalid choice" ;;
+  esac
 fi
 AGENTICDEV_LANG="${AGENTICDEV_LANG:-cs}"
-[[ "$AGENTICDEV_LANG" == cs || "$AGENTICDEV_LANG" == en ]] \
-  || die "AGENTICDEV_LANG musí být cs nebo en / must be cs or en"
+[[ "$AGENTICDEV_LANG" =~ ^(cs|en|de|es|ru|zh|pt|fr|hi|ar)$ ]] \
+  || die "AGENTICDEV_LANG: cs, en, de, es, ru, zh, pt, fr, hi, ar"
 
 say() { # say "česky" "English"
-  [[ "$AGENTICDEV_LANG" == en ]] && printf '%s\n' "$2" || printf '%s\n' "$1"
+  [[ "$AGENTICDEV_LANG" == cs ]] && printf '%s\n' "$1" || printf '%s\n' "$2"
 }
 pick() { # pick "česky" "English"
-  [[ "$AGENTICDEV_LANG" == en ]] && printf '%s' "$2" || printf '%s' "$1"
+  [[ "$AGENTICDEV_LANG" == cs ]] && printf '%s' "$1" || printf '%s' "$2"
 }
 
 installation_tutorial() {
@@ -103,6 +110,118 @@ installation_tutorial() {
   own Linux account when they first select that provider.
 
   Existing installations keep their data and secrets. Press Enter to continue.
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == de ]]; then
+    cat <<'TUTORIAL'
+  Willkommen. Dieser Assistent installiert die vollständige AgenticDev-Plattform.
+
+  Er prüft den Server, installiert Docker, Claude Code und Codex, lässt dich
+  zwischen privatem Tailscale-Zugang und eigener Domain wählen und startet
+  isolierte Agenten, Git, Backups und das Admin-Dashboard.
+
+  Bereithalten: einen sauberen Debian/Ubuntu-VPS mit Root-Zugang, optional
+  Domain oder Tailscale sowie getrennte ADMIN- und JOIN-Passwörter.
+  Claude- und ChatGPT-Abos bleiben persönlich; jeder meldet sich unter seinem
+  eigenen Linux-Konto an. Vorhandene Daten und Secrets bleiben bei Updates erhalten.
+
+  Drücke Enter, um fortzufahren.
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == es ]]; then
+    cat <<'TUTORIAL'
+  Bienvenido. Este asistente instala la plataforma AgenticDev completa.
+
+  Comprueba el servidor, instala Docker, Claude Code y Codex, permite elegir
+  entre acceso privado con Tailscale o un dominio propio, e inicia agentes
+  aislados, Git, copias de seguridad y el panel de administración.
+
+  Prepara un VPS Debian/Ubuntu limpio con acceso root, un dominio o Tailscale
+  opcional y contraseñas ADMIN y JOIN separadas. Las suscripciones de Claude y
+  ChatGPT son personales; cada usuario inicia sesión en su propia cuenta Linux.
+
+  Pulsa Enter para continuar.
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == ru ]]; then
+    cat <<'TUTORIAL'
+  Добро пожаловать. Этот мастер установит всю платформу AgenticDev.
+
+  Он проверит сервер, установит Docker, Claude Code и Codex, предложит выбрать
+  приватный доступ через Tailscale или собственный домен и запустит изолированных
+  агентов, Git, резервные копии и панель администратора.
+
+  Нужны чистый VPS Debian/Ubuntu с root-доступом, при желании домен или Tailscale,
+  а также разные пароли ADMIN и JOIN. Подписки Claude и ChatGPT персональные:
+  каждый пользователь входит под собственной учетной записью Linux.
+
+  Нажмите Enter, чтобы продолжить.
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == zh ]]; then
+    cat <<'TUTORIAL'
+  欢迎。本向导将安装完整的 AgenticDev 平台。
+
+  它会检查服务器，安装 Docker、Claude Code 和 Codex，让你选择私有
+  Tailscale 访问或自己的域名，并启动隔离代理、Git、备份和管理面板。
+
+  请准备一台具有 root 权限的全新 Debian/Ubuntu VPS；域名或 Tailscale
+  可选；ADMIN 与 JOIN 必须使用不同密码。Claude 和 ChatGPT 订阅属于个人，
+  每位用户都在自己的 Linux 账户下登录。升级会保留现有数据与密钥。
+
+  按 Enter 继续。
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == pt ]]; then
+    cat <<'TUTORIAL'
+  Bem-vindo. Este assistente instala a plataforma AgenticDev completa.
+
+  Ele verifica o servidor, instala Docker, Claude Code e Codex, permite escolher
+  acesso privado por Tailscale ou domínio próprio e inicia agentes isolados,
+  Git, backups e o painel administrativo.
+
+  Prepare um VPS Debian/Ubuntu limpo com acesso root, domínio ou Tailscale
+  opcional e senhas ADMIN e JOIN separadas. As assinaturas Claude e ChatGPT são
+  pessoais; cada usuário entra em sua própria conta Linux.
+
+  Pressione Enter para continuar.
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == fr ]]; then
+    cat <<'TUTORIAL'
+  Bienvenue. Cet assistant installe la plateforme AgenticDev complète.
+
+  Il vérifie le serveur, installe Docker, Claude Code et Codex, propose un accès
+  privé Tailscale ou votre propre domaine, puis démarre les agents isolés, Git,
+  les sauvegardes et le tableau de bord d’administration.
+
+  Préparez un VPS Debian/Ubuntu propre avec accès root, éventuellement un domaine
+  ou Tailscale, et des mots de passe ADMIN et JOIN distincts. Les abonnements
+  Claude et ChatGPT restent personnels, dans le compte Linux de chaque utilisateur.
+
+  Appuyez sur Entrée pour continuer.
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == hi ]]; then
+    cat <<'TUTORIAL'
+  स्वागत है। यह सहायक पूरा AgenticDev प्लेटफ़ॉर्म स्थापित करेगा।
+
+  यह सर्वर की जाँच करता है, Docker, Claude Code और Codex स्थापित करता है,
+  निजी Tailscale या अपने डोमेन का विकल्प देता है और अलग-थलग एजेंट, Git,
+  बैकअप तथा प्रशासन पैनल शुरू करता है।
+
+  root पहुँच वाला साफ Debian/Ubuntu VPS, वैकल्पिक डोमेन या Tailscale और अलग
+  ADMIN व JOIN पासवर्ड तैयार रखें। Claude और ChatGPT सदस्यताएँ व्यक्तिगत हैं;
+  हर उपयोगकर्ता अपने Linux खाते में लॉग इन करता है।
+
+  आगे बढ़ने के लिए Enter दबाएँ।
+TUTORIAL
+  elif [[ "$AGENTICDEV_LANG" == ar ]]; then
+    cat <<'TUTORIAL'
+  مرحباً. سيقوم هذا المعالج بتثبيت منصة AgenticDev كاملة.
+
+  سيتحقق من الخادم ويثبت Docker وClaude Code وCodex، ثم يتيح الاختيار بين
+  وصول Tailscale الخاص أو نطاقك الخاص، ويشغّل الوكلاء المعزولين وGit والنسخ
+  الاحتياطية ولوحة الإدارة.
+
+  جهّز خادم Debian/Ubuntu نظيفاً بصلاحية root، ونطاقاً أو Tailscale اختيارياً،
+  وكلمتي مرور منفصلتين ADMIN وJOIN. اشتراكات Claude وChatGPT شخصية؛ يسجل كل
+  مستخدم الدخول من حساب Linux الخاص به.
+
+  اضغط Enter للمتابعة.
 TUTORIAL
   else
     cat <<'TUTORIAL'

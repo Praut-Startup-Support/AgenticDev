@@ -147,16 +147,20 @@ class RuntimeCompletion(unittest.TestCase):
   self.assertNotIn('raw.githubusercontent.com',ctl)
   self.assertIn('claude auth login --claudeai',launcher)
   self.assertIn('codex login --device-auth',launcher)
- def test_vps_installer_starts_with_persistent_bilingual_tutorial(self):
+ def test_vps_installer_starts_with_persistent_multilingual_tutorial(self):
   install=(ROOT/'install-vps.sh').read_text()
   self.assertIn('Choose language / Vyber jazyk',install)
   self.assertIn('AGENTICDEV_LANG=$AGENTICDEV_LANG',install)
-  self.assertIn('AGENTICDEV_LANG=cs|en',install)
+  for code in ('cs','en','de','es','ru','zh','pt','fr','hi','ar'):
+   self.assertIn(f'AGENTICDEV_LANG={code}',install)
   self.assertIn('installation_tutorial()',install)
   self.assertIn('Welcome. This wizard will install',install)
   self.assertIn('Vítej. Tento průvodce nainstaluje',install)
   self.assertIn('Model subscriptions are personal',install)
   self.assertIn('Modelová předplatná jsou osobní',install)
+  for sample in ('Willkommen.','Bienvenido.','Добро пожаловать.','欢迎。',
+                 'Bem-vindo.','Bienvenue.','स्वागत है।','مرحباً.'):
+   self.assertIn(sample,install)
  def test_repository_analysis_is_versioned_cited_and_gates_work_orders(self):
   migrate=(ROOT/'control-plane/app/migrate.py').read_text();repo=(ROOT/'control-plane/app/repository.py').read_text();main=(ROOT/'control-plane/app/main.py').read_text()
   self.assertIn('CREATE TABLE IF NOT EXISTS provider_profile',migrate)

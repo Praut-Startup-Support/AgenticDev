@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AgenticDev — o tom, co agent smí, rozhoduje server</title>
-<meta name="description" content="Self-hosted platforma pro AI vývojové agenty. Co smí agent zapsat, vynucuje jádro podle fáze projektu. Jeden příkaz na instalaci, auditní stopa, kterou nejde přepsat. Zdarma do 1 M € obratu.">
+<meta name="description" content="Self-hosted řízení Claude Code a Codex agentů: podepsané work ordery, kernelově vynucený scope, řízený egress, GitHub identity, auditní ledger a ověřované aktualizace.">
 <meta name="theme-color" content="#050604">
 <link rel="icon" href="agenticdev.ico" sizes="any">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -149,6 +149,10 @@
      statickém terminálu u instalace je z té výšky jen díra pod posledním
      řádkem — tam se má box smrsknout na obsah. */
   .term-static .term-body{min-height:0}
+  .copy-command{margin-left:auto;border:1px solid var(--line2);
+    border-radius:5px;background:#111811;color:var(--fosfor);padding:7px 10px;
+    font:700 11px var(--mono);cursor:pointer}
+  .copy-command:hover,.copy-command:focus{background:var(--fosfor);color:#081008;outline:none}
   .term-body p{margin:0}
   .tin{color:var(--ink)} .tok{color:var(--fosfor)} .twarn{color:var(--yellow)} .tdeny{color:var(--deny)} .tmuted{color:var(--dim)}
 
@@ -282,23 +286,6 @@
   .cta-sec{overflow:hidden}
   .cta-sec .grid-bg{position:absolute; inset:0 0 auto 0; height:420px; z-index:-1; opacity:.6}
   .signup{text-align:center; max-width:540px; margin:0 auto}
-  form{max-width:440px; margin:24px auto 0}
-  .row{display:flex; gap:9px; flex-wrap:wrap}
-  input[type=email]{
-    flex:1; min-width:200px; padding:12px 15px; border-radius:6px; font:14px var(--sans);
-    background:#080c08; border:1px solid var(--line2); color:var(--ink);
-  }
-  input[type=email]:focus{outline:none; border-color:var(--fosfor)}
-  form button{
-    padding:12px 20px; border:0; border-radius:6px; cursor:pointer;
-    background:var(--fosfor); color:#0a0f0a; font:700 13px var(--mono); text-transform:uppercase; letter-spacing:.06em;
-  }
-  form button:hover{filter:brightness(1.1)}
-  .consent{display:flex; gap:9px; align-items:flex-start; margin-top:16px; font-size:12.5px; color:var(--dim2); text-align:left; line-height:1.55}
-  .consent input{margin-top:3px; accent-color:var(--fosfor); flex-shrink:0}
-  .consent a{color:var(--dim)}
-  .msg{margin-top:14px; font-size:13.5px; min-height:20px; font-family:var(--mono)}
-
   footer{border-top:1px solid var(--line); padding:34px 0; color:var(--dim2); font-size:13px; font-family:var(--mono)}
   footer .wrap{display:flex; gap:18px; flex-wrap:wrap; align-items:center}
   footer .fbrand{display:flex; align-items:center; gap:8px; font-weight:700; color:var(--ink)}
@@ -355,8 +342,8 @@
   <div class="wrap hero-grid">
     <div>
       <div class="badge"><span class="dot"></span>
-        <span class="cs">v0.2.0 · alfa · self-hosted · jedna instance na firmu</span>
-        <span class="en">v0.2.0 · alpha · self-hosted · one instance per company</span>
+        <span class="cs">alfa · Claude + Codex subscriptions · self-hosted</span>
+        <span class="en">alpha · Claude + Codex subscriptions · self-hosted</span>
       </div>
       <h1>
         <span class="cs">O tom, co agent smí, rozhoduje <span class="glow">server</span>.<br>
@@ -365,14 +352,14 @@
           <span style="color:var(--dim)">Not the laptop.</span></span>
       </h1>
       <p class="lead">
-        <span class="cs">Vlastní platforma pro AI vývojové agenty. Co smí agent zapsat,
-          plyne z fáze projektu a vynucuje to jádro — ne instrukce. Agent běží
-          v jednorázovém kontejneru na tvém serveru a každé rozhodnutí končí
-          v auditovatelné evidenci, kterou nejde přepsat.</span>
-        <span class="en">Self-hosted platform for AI coding agents. What the agent may write
-          comes from the project phase and is enforced by the kernel — not by
-          instructions. The agent runs in a disposable container on your server, and
-          every decision lands in an audit trail that cannot be rewritten.</span>
+        <span class="cs">Claude Code a Codex umí měnit repozitář rychleji, než ho člověk
+          stihne kontrolovat. AgenticDev proto přesouvá oprávnění, síť, pracovní kopie,
+          schválení a důkazy na server. Agent dostane jen podepsaný úkol, přesně vymezené
+          zapisovatelné cesty a povolené domény; po skončení jeho prostředí zanikne.</span>
+        <span class="en">Claude Code and Codex can change a repository faster than a human
+          can review it. AgenticDev moves permissions, network access, worktrees,
+          approvals and evidence to the server. An agent receives one signed task,
+          exact writable paths and allowed domains; its environment disappears after the run.</span>
       </p>
       <div class="cta">
         <a href="#instalace" class="btn p box-glow">
@@ -534,17 +521,17 @@
   <div class="wrap plat-wrap">
     <div>
       <p class="kicker">// <span class="cs">nasazení</span><span class="en">deployment</span></p>
-      <h2><span class="cs">Jedna instance na firmu. Na strojích lidí nezůstane nic.</span>
-        <span class="en">One instance per company. Nothing lands on anyone's machine.</span></h2>
+      <h2><span class="cs">Jedno místo, kde skutečně vidíš a řídíš agentní vývoj.</span>
+        <span class="en">One place that actually shows and controls agent development.</span></h2>
       <p class="sub">
-        <span class="cs">Agenti běží na tvém serveru, ne na notebocích. Na stroji člověka
-          je jen ikona, která otevře terminál na serveru — žádný Docker, žádný klíč
-          k repozitáři, nic k nastavování a nic k povolování. Nemáme centrální službu
-          a nikdy se nedozvíme, že jsi to nainstaloval.</span>
-        <span class="en">Agents run on your server, not on laptops. All that lands on a
-          person's machine is an icon that opens a terminal on the server — no Docker,
-          no repository credentials, nothing to configure and nothing to approve. There
-          is no central service, and we never learn that you installed it.</span>
+        <span class="cs">Admin panel ukazuje aktivní běhy, projekty, úkoly, rozhodnutí,
+          tým, GitHub identity a skutečný obsah harnessu, agentů, skills, hooků, skriptů
+          a policy. Před první mutací proběhne citovaná read-only analýza konkrétního
+          commitu. Každý člověk používá vlastní Claude nebo ChatGPT subscription.</span>
+        <span class="en">The admin panel shows active runs, projects, tasks, decisions,
+          team members, GitHub identities, and the effective harness, agents, skills,
+          hooks, scripts and policy. Before the first mutation, it performs a cited
+          read-only analysis of the exact commit. Each person uses their own Claude or ChatGPT subscription.</span>
       </p>
       <div class="stats">
         <div><div class="n glow">1</div><div class="l"><span class="cs">instance na firmu</span><span class="en">instance per company</span></div></div>
@@ -615,11 +602,13 @@
     <h2><span class="cs">Jeden příkaz na čistém VPS.</span>
       <span class="en">One command on a clean VPS.</span></h2>
     <p class="sub">
-      <span class="cs">Stáhne vydaný instalátor, ověří jeho <b>sha256</b> i podpis
+      <span class="cs">Česko-anglický průvodce (plus dalších osm jazyků) vysvětlí volby,
+        potom stáhne vydaný instalátor, ověří jeho <b>sha256</b> i podpis
         <b>cosign</b>, pustí jeho vlastní kontrolu — a teprve pak instaluje. Zeptá se na
         sedm věcí a zbytek udělá sám: Docker, firewall, SSH, Postgres, Forgejo, MinIO,
         Caddy, řídicí vrstvu a denní zálohy.</span>
-      <span class="en">It downloads the released installer, verifies its <b>sha256</b> and
+      <span class="en">A guided installer in ten languages explains every choice, then
+        downloads the released installer, verifies its <b>sha256</b> and
         its <b>cosign</b> signature, runs the installer's own self-check — and only then
         installs. It asks seven questions and does the rest: Docker, firewall, SSH,
         Postgres, Forgejo, MinIO, Caddy, the control plane and daily backups.</span>
@@ -629,22 +618,29 @@
       <div class="term-head">
         <i class="r"></i><i class="y"></i><i class="g"></i>
         <span>root@vps</span>
+        <button class="copy-command" type="button" data-copy="ssh -t root@your-vps 'bash &lt;(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'" aria-label="Kopírovat instalační příkaz / Copy install command">COPY</button>
       </div>
       <div class="term-body">
-        <p class="tin">ssh -t root@tvuj-vps 'bash &lt;(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'</p>
+        <p class="tin" id="installCommand">ssh -t root@your-vps 'bash &lt;(curl -fsSL https://raw.githubusercontent.com/Praut-Startup-Support/AgenticDev/main/install.sh)'</p>
         <p class="tok">✓ sha256 souhlasí</p>
         <p class="tok">✓ podpis cosign souhlasí — vydal to Praut-Startup-Support</p>
         <p class="tmuted">→ <span class="cs">na konci dostaneš dva odkazy: panel a odkaz pro tým</span><span class="en">at the end you get two links: the panel and one for your team</span></p>
+        <p class="tin" style="margin-top:8px">$ sudo agenticdev-ctl update --check</p>
+        <p class="tmuted">→ <span class="cs">další release ověříš nebo nainstaluješ bez nové konfigurace</span><span class="en">verify or install later releases without re-entering configuration</span></p>
       </div>
     </div>
 
     <p class="trust" style="margin-top:22px">
-      <span class="cs"><b>Stav je alfa a myslíme to vážně.</b> Sandbox neběžel proti
-        skutečnému Dockeru a doménový režim proti skutečné doméně. Než to nasadíš na
-        ostro, přečti si <a href="https://github.com/Praut-Startup-Support/AgenticDev#známá-omezení" style="color:var(--fosfor)">Známá omezení</a> — je to poctivý seznam, ne formalita.</span>
-      <span class="en"><b>Alpha, and we mean it.</b> The sandbox has not run against a real
-        Docker daemon, nor the domain mode against a real domain. Before you deploy this
-        for real, read <a href="https://github.com/Praut-Startup-Support/AgenticDev#known-limitations" style="color:var(--fosfor)">Known limitations</a> — it is an honest list, not a formality.</span>
+      <span class="cs"><b>Stav je alfa a instalátor mění hostitele.</b> Nastavuje firewall,
+        SSH, Docker, systemd a kontejnery, proto patří na samostatný VPS a před prvním
+        ostrým repozitářem musí projít <code>agenticdev-ctl smoke</code>. Přihlášení Claude
+        a Codexu komunikuje s jejich službami; ostatní egress řídí allowlist. Přečti si
+        <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/SECURITY.md" style="color:var(--fosfor)">bezpečnostní model a známá omezení</a>.</span>
+      <span class="en"><b>This is alpha and the installer changes the host.</b> It configures
+        firewall, SSH, Docker, systemd and containers, so use a dedicated VPS and run
+        <code>agenticdev-ctl smoke</code> before the first production repository. Claude
+        and Codex login communicates with their services; all other egress follows the
+        allowlist. Read the <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/SECURITY.md" style="color:var(--fosfor)">security model and known limitations</a>.</span>
     </p>
   </div>
 </section>
@@ -652,34 +648,22 @@
 <section id="zajem" class="cta-sec">
   <div class="grid-bg"></div>
   <div class="wrap signup">
-    <p class="kicker">// $ agenticdev subscribe</p>
-    <h2><span class="cs">Dáme vědět, až přestane být alfa</span><span class="en">We will tell you when it stops being alpha</span></h2>
+    <p class="kicker">// <span class="cs">rozhodnutí před instalací</span><span class="en">decision before install</span></p>
+    <h2><span class="cs">Nenasazuj to proto, že „AI je budoucnost“.</span><span class="en">Do not deploy it because “AI is the future.”</span></h2>
     <p class="sub" style="margin:0 auto">
-      <span class="cs">Jeden e-mail, až vyjde verze, kterou nasadíme sami u zákazníka.
-        Nic dalšího posílat nebudeme.</span>
-      <span class="en">One email when a release lands that we deploy at a client
-        ourselves. Nothing else.</span>
+      <span class="cs">Nasaď ho, pokud už lidé používají coding agenty a potřebuješ společný
+        audit, serverová oprávnění, reprodukovatelné work ordery a bezpečný způsob práce
+        nad firemními repozitáři. Pokud chceš jen chat nebo osobní autocomplete, tenhle
+        server je zbytečná provozní vrstva.</span>
+      <span class="en">Deploy it when people already use coding agents and you need shared
+        audit, server-enforced permissions, reproducible work orders and a controlled way
+        to work on company repositories. If you only need chat or personal autocomplete,
+        this server is unnecessary operational machinery.</span>
     </p>
-
-    <form id="f" action="https://formspree.io/f/xbgroknv" method="POST">
-      <div class="row">
-        <input type="email" name="email" required autocomplete="email"
-               placeholder="jmeno@firma.cz">
-        <button type="submit"><span class="cs">Odebírat</span><span class="en">Notify me</span></button>
-      </div>
-      <label class="consent">
-        <input type="checkbox" name="souhlas" required>
-        <span>
-          <span class="cs">Souhlasím, aby Praut s.r.o. použil moji adresu k jedinému
-            účelu — oznámit vydání AgenticDev mimo alfu. Souhlas můžu kdykoli odvolat na
-            svanda@praut.cz a adresa bude smazána.</span>
-          <span class="en">I agree that Praut s.r.o. may use my address for one purpose —
-            to announce the AgenticDev release beyond alpha. I can withdraw consent any time at
-            svanda@praut.cz and the address will be deleted.</span>
-        </span>
-      </label>
-      <div class="msg" id="m"></div>
-    </form>
+    <div class="cta" style="justify-content:center;margin-top:26px">
+      <a href="https://github.com/Praut-Startup-Support/AgenticDev#readme" class="btn p"><span class="cs">Ověřit požadavky</span><span class="en">Check requirements</span></a>
+      <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/SECURITY.md" class="btn s"><span class="cs">Přečíst bezpečnostní model</span><span class="en">Read the security model</span></a>
+    </div>
   </div>
 
   <footer>
@@ -691,10 +675,6 @@
       <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/SECURITY.md">
         <span class="cs">Bezpečnost</span><span class="en">Security</span></a>
       <a href="mailto:svanda@praut.cz">svanda@praut.cz</a>
-      <span class="sp">
-        <span class="cs">Adresy neprodáváme ani nepředáváme.</span>
-        <span class="en">We do not sell or share addresses.</span>
-      </span>
     </div>
   </footer>
 </section>
@@ -724,30 +704,19 @@
 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ── formulář ── */
-  const msg = document.getElementById('m'), f = document.getElementById('f');
-  const T = {
-    cs: { wait:'odesílám…', ok:'Hotovo. Ozveme se, až to vyjde.',
-          err:'Nepovedlo se to. Zkus to znovu, nebo napiš na svanda@praut.cz.' },
-    en: { wait:'sending…', ok:'Done. We will be in touch at launch.',
-          err:'That did not work. Try again, or write to svanda@praut.cz.' }
-  };
-  f.onsubmit = async e => {
-    e.preventDefault();
-    const t = T[currentLang()];
-    msg.style.color = 'var(--dim)';
-    msg.textContent = t.wait;
-    try {
-      const r = await fetch(f.action, { method:'POST', body:new FormData(f), headers:{ Accept:'application/json' } });
-      if (!r.ok) throw new Error();
-      msg.style.color = 'var(--fosfor)';
-      msg.textContent = t.ok;
-      f.reset();
-    } catch (err) {
-      msg.style.color = 'var(--deny)';
-      msg.textContent = t.err;
-    }
-  };
+  /* ── kopírování instalačního příkazu ── */
+  async function copyText(text){
+    if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); return; }
+    const area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');
+    area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();
+    document.execCommand('copy');area.remove();
+  }
+  document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{
+    const original=button.textContent;
+    try{await copyText(button.dataset.copy);button.textContent=currentLang()==='cs'?'ZKOPÍROVÁNO':'COPIED';}
+    catch(e){button.textContent=currentLang()==='cs'?'VYBER RUČNĚ':'SELECT MANUALLY';}
+    setTimeout(()=>button.textContent=original,1600);
+  }));
 
   /* ── hero terminál ── */
   const SCRIPTS = {
@@ -1461,12 +1430,13 @@
   (function(){
     const canvas = document.getElementById('nations');
     const ctx = canvas.getContext('2d', {alpha:true});
+    // Každý národ je jiný odstín zelené; žádná žlutá, modrá ani červená.
     const palette = [
-      [163,255,92],[240,214,74],[104,218,255],[255,112,91],
-      [198,145,255],[103,237,178],[255,174,79]
+      [205,255,176],[174,255,120],[143,239,92],[112,220,78],[82,201,69],
+      [58,179,61],[39,155,57],[25,132,51],[15,108,44],[8,84,35]
     ];
-    const cellPx = innerWidth < 700 ? 15 : 12;
-    let cols=0, rows=0, cells, age, strength, nations=[], timer=0, last=0, raf=0;
+    const cellPx = innerWidth < 700 ? 12 : 9;
+    let cols=0, rows=0, cells, age, strength, nations=[], attacks=[], timer=0, last=0, raf=0;
     let lastCursorAt=0, lastCursorX=-999, lastCursorY=-999;
 
     // Seeded PRNG keeps one page load internally consistent while every
@@ -1502,8 +1472,8 @@
       const count=3+pick(5); // pokaždé jen několik národů: 3–7
       nations=Array.from({length:count},(_,id)=>({
         id,color:palette[id],alive:true,cells:0,
-        expansion:.36+rnd()*.24, resilience:.2+rnd()*.34,
-        decline:.0015+rnd()*.003, phase:rnd()*Math.PI*2
+        expansion:.58+rnd()*.3, resilience:.14+rnd()*.3,
+        decline:.004+rnd()*.007, phase:rnd()*Math.PI*2
       }));
       for(const n of nations){
         const cx=2+pick(Math.max(1,cols-4)), cy=2+pick(Math.max(1,rows-4));
@@ -1517,8 +1487,8 @@
     }
     function nationTraits(id){
       return {id,color:palette[id%palette.length],alive:true,cells:0,
-        expansion:.36+rnd()*.24,resilience:.2+rnd()*.34,
-        decline:.0015+rnd()*.003,phase:rnd()*Math.PI*2};
+        expansion:.58+rnd()*.3,resilience:.14+rnd()*.3,
+        decline:.004+rnd()*.007,phase:rnd()*Math.PI*2};
     }
     function cellAtPage(x,y){
       const cx=Math.floor(x/cellPx),cy=Math.floor(y/cellPx);
@@ -1565,7 +1535,7 @@
       for(const n of nations)n.alive=n.cells>0;
     }
     function tick(dt){
-      timer+=dt; const attempts=Math.min(2400,Math.max(180,Math.floor(cells.length*.045)));
+      timer+=dt; const attempts=Math.min(6200,Math.max(420,Math.floor(cells.length*.12)));
       recount();
       for(let k=0;k<attempts;k++){
         const i=pick(cells.length), owner=cells[i];
@@ -1588,17 +1558,28 @@
           if(rnd()<frontier){cells[j]=owner;age[j]=0;strength[j]=.32+rnd()*.34;}
         }else{
           const defender=nations[other];
-          const attack=frontier*(.7+rnd()*.6);
+          const attack=frontier*(.82+rnd()*.75);
           const defense=strength[j]*(.65+defender.resilience);
-          if(attack>defense){strength[j]-=.15+rnd()*.25;
-            if(strength[j]<=0){cells[j]=owner;age[j]=0;strength[j]=.25+rnd()*.3;}
-          }else if(rnd()<.18){strength[i]=Math.max(0,strength[i]-.08);}
+          // Útok je lokální fronta, ne náhodné přebarvení jednoho pixelu.
+          // Zasažené místo i jeho sousedé stejného obránce současně ztrácí
+          // sílu; při průlomu se území přelije několika navazujícími body.
+          attacks.push({from:i,to:j,owner,started:timer});
+          if(attacks.length>90)attacks.shift();
+          const front=[j,...neighbors(j).filter(x=>cells[x]===other&&rnd()<.55)];
+          for(const target of front){
+            strength[target]-=(attack>defense?.22:.08)+rnd()*.28;
+            if(strength[target]<=0&&attack>defense*.72){
+              cells[target]=owner;age[target]=0;strength[target]=.24+rnd()*.34;
+            }
+          }
+          if(attack<=defense&&rnd()<.35){strength[i]=Math.max(0,strength[i]-.12-rnd()*.1);}
         }
       }
       // Když většina říší vymře, občas přijde nový cyklus; počet současně
       // aktivních národů ale nikdy nepřeroste původní náhodné maximum.
       const alive=nations.filter(n=>n.alive).length;
-      if(alive<2&&rnd()<dt*.08){cells.fill(-1);age.fill(0);strength.fill(0);seedWorld();}
+      if(alive<2&&rnd()<dt*.24){cells.fill(-1);age.fill(0);strength.fill(0);seedWorld();}
+      attacks=attacks.filter(a=>timer-a.started<.34);
     }
     function draw(){
       const img=ctx.createImageData(cols,rows), d=img.data;
@@ -1609,12 +1590,26 @@
         d[i*4]=c[0];d[i*4+1]=c[1];d[i*4+2]=c[2];d[i*4+3]=a;
       }
       ctx.putImageData(img,0,0);
+      // Krátká zelená čára a lokální body ukazují směr právě probíhajícího
+      // útoku. Efekt zanikne během několika ticků a nepřekrývá obsah webu.
+      for(const a of attacks){
+        const life=1-(timer-a.started)/.34;if(life<=0)continue;
+        const fx=a.from%cols+.5,fy=Math.floor(a.from/cols)+.5;
+        const tx=a.to%cols+.5,ty=Math.floor(a.to/cols)+.5;
+        const c=palette[a.owner%palette.length];
+        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${.85*life})`;
+        ctx.lineWidth=.45+life;ctx.beginPath();ctx.moveTo(fx,fy);ctx.lineTo(tx,ty);ctx.stroke();
+        for(const local of neighbors(a.to))if(cells[local]===a.owner){
+          ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${.5*life})`;
+          ctx.fillRect(local%cols,Math.floor(local/cols),1,1);
+        }
+      }
     }
     function loop(now){
       // Území se mění v diskrétních ticích (~12/s), ne na každém render
       // snímku. Je to levnější a pohyb hranic působí jako živá mapa.
-      if(last&&now-last<80){raf=requestAnimationFrame(loop);return;}
-      const dt=Math.min(.12,last?(now-last)/1000:.08);last=now;
+      if(last&&now-last<36){raf=requestAnimationFrame(loop);return;}
+      const dt=Math.min(.06,last?(now-last)/1000:.036);last=now;
       tick(dt);draw();raf=requestAnimationFrame(loop);
     }
     addEventListener('resize',()=>{resize();draw();});

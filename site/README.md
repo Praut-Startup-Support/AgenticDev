@@ -1,25 +1,17 @@
 # Web / Landing page
 
-Jedna statická stránka, dvojjazyčně, nasazuje se na GitHub Pages.
+Jedna statická stránka, česky a anglicky, nasazuje se na GitHub Pages.
 Žádný build, žádné závislosti — `index.html` a čtyři obrázky.
 
 ---
 
 ## Než to nasadíš
 
-### 1. Formulář
+### 1. Obsah
 
-Doplněný je — `index.html` posílá na `https://formspree.io/f/xbgroknv`.
-Nasazovací workflow kontroluje, že tam nezůstal zástupný `DOPLN_FORM_ID`,
-a když ano, **schválně spadne**: sbírat adresy do prázdna je horší než
-formulář nemít.
-
-Když formulář přesměrováváš jinam, změň `action` ve `<form id="f">` a
-ověř, že odesílání vrací 200 — stránka hlásí úspěch podle stavového kódu.
-
-Alternativy, kdyby ti Formspree nesedělo: [Tally](https://tally.so),
-[Buttondown](https://buttondown.com) (dělaný na newslettery, zdarma do
-100 adres), [Formcarry](https://formcarry.com).
+Web není newsletter ani obecný AI marketing. Každá sekce má popisovat
+konkrétní vynucovaný mechanismus, provozní dopad nebo omezení aktuální verze.
+Instalační příkaz má viditelný ovladač Copy s Clipboard API i fallbackem.
 
 ### 2. Doména
 
@@ -110,13 +102,10 @@ protože v jednom by se rozsypalo zarovnání.
 
 ---
 
-## Osobní údaje
+## Pozadí
 
-Formulář má povinné zaškrtávátko se souhlasem, uvedený jediný účel a
-adresu pro odvolání. To je minimum, ne komplet — až budeš adresy
-skutečně používat, hodí se k tomu mít i informační sdělení podle GDPR
-a někde zapsané, kdy kdo souhlas dal.
-
-Formspree ty adresy drží u sebe, takže je to zpracovatel — na to se
-váže zpracovatelská smlouva. Mají ji jako součást podmínek, ale je dobré
-si to přečíst, než tam padne první adresa.
+Canvas simuluje několik čistě pozemních národů. Používá pouze odstíny zelené,
+rychlé lokální fronty, expanzi, ústup a úplné vymření. Pohyb kurzoru území
+slabě oslabuje; kliknutí posílí místní národ nebo založí nový. Aliance, voda,
+hory, lodě ani rakety v modelu nejsou. Při `prefers-reduced-motion` se animace
+nespouští.
