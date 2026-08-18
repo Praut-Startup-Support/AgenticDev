@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AgenticDev — agenti pod kontrolou serveru</title>
-<meta name="description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server — ne notebook. Zdarma pro firmy do 1 M € obratu.">
+<title>AgenticDev: agenti pod kontrolou serveru</title>
+<meta name="description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server, ne notebook. Zdarma pro firmy do 1 M € obratu.">
 <meta name="theme-color" content="#050604">
 <link rel="icon" href="agenticdev.ico">
 <meta property="og:title" content="AgenticDev">
-<meta property="og:description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server — ne notebook.">
+<meta property="og:description" content="Self-hosted platforma pro AI vývojové agenty. O tom, co agent smí, rozhoduje server, ne notebook.">
 <meta property="og:image" content="og.png">
 <meta property="og:type" content="website">
 <style>
@@ -38,9 +38,10 @@
     *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
   }
 
-  #rd, #dots{position:absolute; top:0; left:0; z-index:0; pointer-events:none}
-  #scrim{position:fixed; inset:0; z-index:0; pointer-events:none; background:rgba(3,4,3,.55)}
-  .site{position:relative; z-index:1}
+  #rd{position:absolute; top:0; left:0; z-index:0; pointer-events:none}
+  #scrim{position:fixed; inset:0; z-index:1; pointer-events:none; background:rgba(3,4,3,.7)}
+  #dots{position:absolute; top:0; left:0; z-index:2; pointer-events:none}
+  .site{position:relative; z-index:3}
 
   .wrap{max-width:var(--w); margin:0 auto; padding:0 24px}
   .mono{font-family:var(--mono)}
@@ -359,9 +360,9 @@
         <div class="row1"><span class="n">01</span><span class="tag">policy → grant</span></div>
         <h3><span class="cs">Fáze určuje pravidla</span><span class="en">Phase sets the rules</span></h3>
         <p><span class="cs">Server čte aktuální fázi projektu a z ní přesně odvodí, co agent
-          směl dělat. Notebook se nikdy neptá — poslouchá.</span>
+          směl dělat. Notebook se nikdy neptá, jen poslouchá.</span>
           <span class="en">The server reads the current project phase and derives exactly
-          which capabilities the agent is allowed to use. The laptop never asks — it obeys.</span></p>
+          which capabilities the agent is allowed to use. The laptop never asks. It obeys.</span></p>
         <div class="bar"></div>
       </div>
       <div class="step">
@@ -376,9 +377,9 @@
       <div class="step">
         <div class="row1"><span class="n">03</span><span class="tag">append → seal</span></div>
         <h3><span class="cs">Rozhodnutí se pečetí</span><span class="en">Decisions are sealed</span></h3>
-        <p><span class="cs">Udělení, zamítnutí, eskalace — každé rozhodnutí se zapíše do
+        <p><span class="cs">Udělení, zamítnutí i eskalace: každé rozhodnutí se zapíše do
           append-only evidence s hashem. Plně auditovatelné, navždy.</span>
-          <span class="en">Grant, deny, escalate — each decision is written to an
+          <span class="en">Grant, deny, escalate: each decision is written to an
           append-only ledger with its inputs and hash. Fully auditable, forever.</span></p>
         <div class="bar"></div>
       </div>
@@ -396,9 +397,9 @@
       └── <b>/run/agenticdev</b>   <span class="cs">token a policy na tmpfs, po skončení nic</span><span class="en">token and policy on tmpfs, nothing after</span></pre>
     </div>
     <p class="trust">
-      <span class="cs">Git po síti dělá hostitel — agent nikdy nedrží přihlašovací údaje
+      <span class="cs">Git po síti dělá hostitel. Agent nikdy nedrží přihlašovací údaje
         k repozitáři. Zápis mimo povolený rozsah skončí chybou souborového systému.</span>
-      <span class="en">Network git operations stay on the host — the agent never holds
+      <span class="en">Network git operations stay on the host. The agent never holds
         credentials to your repository. A write outside scope fails at the filesystem.</span>
     </p>
   </div>
@@ -442,10 +443,10 @@
         <span class="en">Every decision lands in an auditable ledger.</span></h2>
       <p class="sub">
         <span class="cs">Nic, co agent udělá, není mimo záznam. Každé udělení, zamítnutí i
-          eskalace se zapečetí se svými vstupy a zřetězeným hashem — nezfalšovatelně a
+          eskalace se zapečetí se svými vstupy a zřetězeným hashem: nezfalšovatelně a
           přehledně i dlouho po tom, co kontejner zmizí.</span>
         <span class="en">Nothing the agent does is off the record. Each grant, denial, and
-          escalation is sealed with its inputs and a chained hash — tamper-evident and
+          escalation is sealed with its inputs and a chained hash, tamper-evident and
           reviewable long after the container is gone.</span>
       </p>
       <ul class="feat">
@@ -457,7 +458,7 @@
 
     <div class="ledger-panel" id="ledgerPanel">
       <div class="ledger-head">
-        <span class="live"><span class="d"></span>ledger.stream — <span class="cs">živě</span><span class="en">live</span></span>
+        <span class="live"><span class="d"></span>ledger.stream - <span class="cs">živě</span><span class="en">live</span></span>
         <span>seq #<span id="ledgerSeq">4824</span></span>
       </div>
       <div id="ledgerRows"></div>
@@ -472,10 +473,10 @@
       <h2><span class="cs">Jedna instance na firmu. Běží všude, kde běží vaši lidé.</span>
         <span class="en">One instance per company. Runs everywhere your engineers do.</span></h2>
       <p class="sub">
-        <span class="cs">Self-hosted z principu — váš policy engine, vaše evidence, vaše
+        <span class="cs">Self-hosted z principu: váš policy engine, vaše evidence, vaše
           kontejnery, uvnitř vašeho perimetru. Klient agenta běží nativně na každém
           desktopovém OS, zatímco každé rozhodnutí zůstává na serveru, který kontrolujete vy.</span>
-        <span class="en">Self-hosted by design — your policy engine, your ledger, your
+        <span class="en">Self-hosted by design: your policy engine, your ledger, your
           containers, inside your perimeter. The agent client is native on every major
           desktop OS, while every decision stays on the server you control.</span>
       </p>
@@ -529,9 +530,9 @@
       </div>
     </div>
     <p class="small" style="margin-top:22px">
-      <span class="cs">Business Source License 1.1. Není to open source podle definice OSI —
-        je to source-available. <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--fosfor)">Rozdíl vysvětlujeme tady</a>.</span>
-      <span class="en">Business Source License 1.1. Not OSI open source — source-available.
+      <span class="cs">Business Source License 1.1. Není to open source podle definice OSI.
+        Je to source-available. <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--fosfor)">Rozdíl vysvětlujeme tady</a>.</span>
+      <span class="en">Business Source License 1.1. Not OSI open source. Source-available.
         <a href="https://github.com/Praut-Startup-Support/AgenticDev/blob/main/LICENSE-FAQ.md" style="color:var(--fosfor)">We explain the difference here</a>.</span>
     </p>
   </div>
@@ -557,9 +558,9 @@
         <input type="checkbox" name="souhlas" required>
         <span>
           <span class="cs">Souhlasím, aby Praut s.r.o. použil moji adresu k jedinému
-            účelu — oznámit vydání AgenticDev. Souhlas můžu kdykoli odvolat na
+            účelu: oznámit vydání AgenticDev. Souhlas můžu kdykoli odvolat na
             svanda@praut.cz a adresa bude smazána.</span>
-          <span class="en">I agree that Praut s.r.o. may use my address for one purpose —
+          <span class="en">I agree that Praut s.r.o. may use my address for one purpose:
             to announce the AgenticDev release. I can withdraw consent any time at
             svanda@praut.cz and the address will be deleted.</span>
         </span>
@@ -852,8 +853,8 @@
       void main(){
         float v = texture(uState, vUv).g;
         vec3 bg = vec3(0.02,0.024,0.016);
-        vec3 mid = vec3(0.03,0.06,0.09);
-        vec3 edge = vec3(0.42,1.0,0.36);
+        vec3 mid = vec3(0.02,0.035,0.05);
+        vec3 edge = vec3(0.3,0.72,0.26);
         float body = smoothstep(0.05,0.34,v);
         float rim = smoothstep(0.14,0.30,v) * (1.0-smoothstep(0.30,0.46,v));
         outColor = vec4(mix(bg, mid, body*0.26) + edge*rim*0.16, 1.0);
@@ -1302,6 +1303,27 @@
       mouse.x = e.pageX; mouse.y = e.pageY;
       for (let i = 0; i < 3; i++) spawnOne(Math.floor(Math.random()*COLOR.length), e.pageX, e.pageY); // klik = nový bod
       if (!/^(a|button|input|label)$/i.test(e.target.tagName)) e.preventDefault();
+    });
+
+    // najetí na prvek UI vykreslí na pozadí body podél jeho obrysu
+    function spawnAlongRect(el){
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const x0 = r.left + window.scrollX, y0 = r.top + window.scrollY;
+      const perimeter = 2*(r.width + r.height);
+      const n = Math.min(26, Math.max(8, Math.round(perimeter/34)));
+      for (let i = 0; i < n; i++){
+        const t = (i/n) * perimeter;
+        let x, y;
+        if (t < r.width){ x = x0+t; y = y0; }
+        else if (t < r.width+r.height){ x = x0+r.width; y = y0+(t-r.width); }
+        else if (t < 2*r.width+r.height){ x = x0+r.width-(t-r.width-r.height); y = y0+r.height; }
+        else { x = x0; y = y0+r.height-(t-2*r.width-r.height); }
+        spawnOne(Math.floor(Math.random()*COLOR.length), x, y);
+      }
+    }
+    document.querySelectorAll('a, button, .card, .plat-card, .step, .pg-tab, input[type=email]').forEach(el => {
+      el.addEventListener('pointerenter', () => spawnAlongRect(el));
     });
 
     resize();
